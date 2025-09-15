@@ -1,0 +1,140 @@
+import { WordCategory, Word, StoryTone, AIPersonality } from './types';
+
+export const MAX_WORDS_PER_ROUND = 5;
+
+export const WORD_CATEGORY_THAI: Record<WordCategory, string> = {
+  [WordCategory.ANIMALS_NATURE]: "สัตว์และธรรมชาติ",
+  [WordCategory.FAMILY_PEOPLE]: "ครอบครัวและบุคคล",
+  [WordCategory.FOOD_DRINK]: "อาหารและของกิน",
+  [WordCategory.THINGS_TOYS]: "สิ่งของและของเล่น",
+  [WordCategory.PLACES_ENVIRONMENT]: "สถานที่และสภาพแวดล้อม",
+  [WordCategory.ACTIONS_EMOTIONS]: "กิริยาอาการและอารมณ์",
+};
+
+export const STORY_TONE_THAI: Record<StoryTone, string> = {
+  [StoryTone.ADVENTURE]: "ผจญภัย",
+  [StoryTone.HEARTWARMING]: "อบอุ่นและให้ข้อคิด",
+  [StoryTone.FUNNY]: "สนุกสนานและเฮฮา",
+  [StoryTone.DREAMY]: "ความฝันและจินตนาการ",
+  [StoryTone.MYSTERY]: "สืบสวนและไขปริศนา",
+  [StoryTone.RELATIONSHIPS]: "ความสัมพันธ์และมิตรภาพ",
+};
+
+export const AI_PERSONALITY_THAI: Record<AIPersonality, string> = {
+  [AIPersonality.WARM]: "อบอุ่นและเป็นกันเอง",
+  [AIPersonality.WISE]: "สุขุมและรอบรู้",
+  [AIPersonality.ENERGETIC]: "ตื่นเต้นและกระตือรือร้น",
+  [AIPersonality.SILLY]: "ตลกและขี้เล่น",
+  [AIPersonality.BRAVE]: "นักสำรวจผู้กล้าหาญ",
+};
+
+export const STORY_FOLLOW_UP_QUESTIONS_TH: string[] = [
+  "แล้วจะเกิดอะไรขึ้นต่อไปนะ?",
+  "เล่าให้ฟังหน่อยสิ ว่าเรื่องราวจะเป็นยังไงต่อ",
+  "ตาของน้องๆ แล้ว ลองแต่งเรื่องต่อจากนี้ดูสิ",
+  "น้องๆ อยากให้พวกเขาทำอะไรกันต่อดี?",
+  "แล้วเหตุการณ์ต่อไปจะเป็นยังไงนะ?",
+  "ช่วยคิดหน่อยสิ ว่าจะเกิดอะไรขึ้นต่อไป",
+  "มีไอเดียอะไรเจ๋งๆ สำหรับฉากต่อไปไหม?",
+  "แล้วการผจญภัยของพวกเขาจะเป็นอย่างไรต่อไป?",
+  "น้องๆ คิดว่าพวกเขาควรจะไปที่ไหนต่อ?",
+  "จะเกิดเรื่องน่าตื่นเต้นอะไรขึ้นอีกนะ?",
+  "บอกหน่อยสิ ว่าเรื่องราวจะดำเนินต่อไปอย่างไร",
+  "แล้วพวกเขาจะเจอกับอะไรต่อไป?",
+  "อยากให้เกิดอะไรขึ้นในฉากต่อไป เล่ามาได้เลย",
+  "น้องๆ ลองจินตนาการดูสิ ว่าจะเกิดอะไรขึ้น",
+  "มาช่วยกันแต่งเรื่องต่อให้จบกันเถอะ!",
+  "แล้วพวกเขาก็... (ให้น้องๆ เติม)",
+  "น้องๆ คิดว่าใครจะโผล่มาในฉากต่อไป?",
+  "เรื่องราวต่อไปขึ้นอยู่กับน้องๆ แล้วนะ",
+  "แล้วทางไหนคือทางที่พวกเขาจะเลือกไปต่อ?",
+  "มีอะไรสนุกๆ รอพวกเขาอยู่ข้างหน้านะ?",
+  "เล่าตอนต่อไปให้ฟังหน่อยได้ไหม?",
+  "จะเกิดอะไรขึ้นกับเพื่อนๆ ของเราต่อไปนะ?",
+  "น้องๆ อยากเห็นอะไรในฉากต่อไป?",
+  "แล้วพวกเขาจะแก้ปัญหานี้ยังไงดี?",
+  "มาดูกันสิว่าน้องๆ จะแต่งเรื่องได้เก่งแค่ไหน",
+  "แล้วตัวละครใหม่จะโผล่มาไหมนะ?",
+  "ต่อไปจะเป็นฉากที่น่าตื่นเต้นที่สุดเลย! น้องๆ คิดว่าคืออะไร?",
+  "แล้วแผนการต่อไปของพวกเขาคืออะไร?",
+  "น้องๆ คือผู้กำกับเรื่องนี้นะ สั่งมาได้เลย!",
+  "เรื่องราวจะเป็นยังไงต่อนะ บอกไอเดียของน้องๆ มาได้เลย",
+];
+
+export const STORY_FOLLOW_UP_QUESTIONS_EN: string[] = [
+  "So, what do you think should happen next?",
+  "And what happens next? What do you think?",
+  "How does the story continue? Tell me your ideas!",
+  "What should they do next?",
+  "Now it's your turn. What happens in the next part of the story?",
+  "What happens after that?",
+  "Tell me what happens in the next scene.",
+  "It's up to you now! What's next?",
+  "What adventure is waiting for them?",
+  "What exciting thing will happen now?",
+  "Where should they go from here?",
+  "Who do you think they will meet next?",
+  "Use your imagination! What comes next?",
+  "Let's continue the story together. What's your idea?",
+  "And then... (you can fill in the blank)",
+  "What's their next move?",
+  "What happens to our friends now?",
+  "What do you want to see in the next scene?",
+  "How will they solve this problem?",
+  "I can't wait to hear what you come up with!",
+  "The next part of the story is all yours.",
+  "What choice will they make now?",
+  "What fun is waiting for them around the corner?",
+  "Can you tell me the next part?",
+  "What's going to happen to our heroes?",
+  "You're the storyteller now. Go ahead!",
+  "What's their next plan?",
+  "What mystery will they uncover next?",
+  "Tell me, what should happen right now?",
+  "Let's see what amazing idea you have!",
+];
+
+export const VOCABULARY: Record<WordCategory, Word[]> = {
+  [WordCategory.ANIMALS_NATURE]: [
+    { thai: "สุนัข", english: "dog" },
+    { thai: "แมว", english: "cat" },
+    { thai: "ต้นไม้", english: "tree" },
+    { thai: "ดอกไม้", english: "flower" },
+    { thai: "สิงโต", english: "lion" },
+  ],
+  [WordCategory.FAMILY_PEOPLE]: [
+    { thai: "แม่", english: "mother" },
+    { thai: "พ่อ", english: "father" },
+    { thai: "เด็ก", english: "baby" },
+    { thai: "เพื่อน", english: "friend" },
+    { thai: "ครู", english: "teacher" },
+  ],
+  [WordCategory.FOOD_DRINK]: [
+    { thai: "แอปเปิ้ล", english: "apple" },
+    { thai: "นม", english: "milk" },
+    { thai: "ขนมปัง", english: "bread" },
+    { thai: "น้ำ", english: "water" },
+    { thai: "เค้ก", english: "cake" },
+  ],
+  [WordCategory.THINGS_TOYS]: [
+    { thai: "หนังสือ", english: "book" },
+    { thai: "ลูกบอล", english: "ball" },
+    { thai: "บ้าน", english: "house" },
+    { thai: "เก้าอี้", english: "chair" },
+    { thai: "รถยนต์", english: "car" },
+  ],
+  [WordCategory.PLACES_ENVIRONMENT]: [
+    { thai: "โรงเรียน", english: "school" },
+    { thai: "สวน", english: "park" },
+    { thai: "ทะเล", english: "sea" },
+    { thai: "ภูเขา", english: "mountain" },
+    { thai: "เมือง", english: "city" },
+  ],
+  [WordCategory.ACTIONS_EMOTIONS]: [
+    { thai: "วิ่ง", english: "run" },
+    { thai: "กิน", english: "eat" },
+    { thai: "นอน", english: "sleep" },
+    { thai: "มีความสุข", english: "happy" },
+    { thai: "เศร้า", english: "sad" },
+  ],
+};

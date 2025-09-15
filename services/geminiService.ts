@@ -1,0 +1,280 @@
+
+import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
+import { StoryScene, Language, Word, WordCategory, StoryTone, AIPersonality } from '../types';
+import { VOCABULARY, STORY_TONE_THAI } from '../constants';
+
+
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+
+const getPersonalityPrompt = (personality: AIPersonality, language: Language): string => {
+  const isThai = language === Language.TH;
+  switch (personality) {
+    case AIPersonality.WISE:
+      return isThai
+        ? "สมมติตัวเองเป็นนักเล่านิทานผู้สุขุมและรอบรู้ เล่าเรื่องด้วยน้ำเสียงที่สงบและให้ข้อคิด"
+        : "Act as a wise, calm storyteller, weaving tales with a serene and thoughtful voice.";
+    case AIPersonality.ENERGETIC:
+      return isThai
+        ? "สมมติตัวเองเป็นเพื่อนที่กระตือรือร้นและตื่นเต้น กำลังชวนเด็กๆ ไปผจญภัยในโลกนิทานด้วยน้ำเสียงที่สดใสและเต็มไปด้วยพลัง"
+        : "Act as an excited and energetic friend, inviting the child on an adventure with a vibrant and enthusiastic voice.";
+    case AIPersonality.SILLY:
+      return isThai
+        ? "สมมติตัวเองเป็นตัวตลกขี้เล่นที่ชอบทำให้เด็กๆ หัวเราะ เล่าเรื่องด้วยมุกตลกและเสียงแปลกๆ ที่น่าขบขัน"
+        : "Act as a silly, playful clown who loves making children laugh. Tell the story with jokes and funny, exaggerated voices.";
+    case AIPersonality.BRAVE:
+      return isThai
+        ? "สมมติตัวเองเป็นนักสำรวจผู้กล้าหาญที่เพิ่งกลับมาจากการผจญภัย เล่าเรื่องราวด้วยน้ำเสียงที่หนักแน่นและน่าตื่นเต้น"
+        : "Act as a brave explorer just returned from a grand expedition. Narrate the tale with a bold, exciting voice full of wonder.";
+    case AIPersonality.WARM:
+    default:
+      return isThai
+        ? "สมมติตัวเองเป็นพ่อ/แม่ที่กำลังเล่านิทานให้ลูกฟังด้วยน้ำเสียงที่อบอุ่นและเป็นกันเอง"
+        : "Act as a warm, friendly parent telling a story to a young child.";
+  }
+};
+
+export const generateVocabularyList = async (category: WordCategory): Promise<Word[]> => {
+  const prompt = `Generate a list of 10 vocabulary words for a 4-7 year old child in the category "${category}". 
+The words must be thematically coherent and suitable for creating a single children's story. 
+Provide the output as a JSON array where each object has a "thai" key (the word in Thai) and an "english" key (the word in English).
+Example: [{"thai": "สุนัข", "english": "dog"}]`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              thai: { type: Type.STRING },
+              english: { type: Type.STRING },
+            },
+            required: ["thai", "english"],
+          },
+        },
+      },
+    });
+
+    const jsonString = (response.text ?? '').trim();
+    if (!jsonString) {
+      throw new Error("API returned empty vocabulary list.");
+    }
+    const wordList = JSON.parse(jsonString);
+
+    if (Array.isArray(wordList) && wordList.length > 0) {
+      return wordList;
+    }
+    throw new Error("Parsed JSON is not a valid word list.");
+
+  } catch (error) {
+    console.error(`Error generating vocabulary list for category "${category}":`, error);
+    // Fallback to the hardcoded list
+    return [...VOCABULARY[category]];
+  }
+};
+
+
+export const generateVocabImage = async (word: string): Promise<string> => {
+  try {
+    const prompt = `A very simple, clear, child-friendly illustration of ONLY the object: "${word}". White background. Centered object. Vibrant colors. CRITICAL INSTRUCTION: Do not include any text, letters, or words in the image. The output must be purely pictorial.`;
+    const response = await ai.models.generateImages({
+        model: 'imagen-4.0-generate-001',
+        prompt: prompt,
+        config: {
+          numberOfImages: 1,
+          outputMimeType: 'image/jpeg',
+          aspectRatio: '4:3',
+        },
+    });
+
+    if (response.generatedImages && response.generatedImages.length > 0) {
+      const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
+      return `data:image/jpeg;base64,${base64ImageBytes}`;
+    }
+    throw new Error('Image generation failed: No images returned.');
+  } catch (error) {
+    console.error(`Error generating vocab image for "${word}":`, error);
+    const errorMessage = (error as any)?.error?.message || (error as any)?.message || JSON.stringify(error);
+    if (errorMessage.includes('quota exceeded') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+        alert("โควต้าสร้างภาพสำหรับวันนี้หมดแล้ว!\n\nคุณสามารถเล่นต่อโดยใช้ภาพสำรองได้ โดยไปที่ 'ตั้งค่า' และปิด 'สร้างภาพคำศัพท์ AI' และ 'สร้างภาพนิทาน AI' ชั่วคราวนะคะ");
+    }
+    return `https://picsum.photos/seed/${word}/400/300`; // Fallback image
+  }
+};
+
+const generateImage = async (prompt: string, words: string[], isImageGenerationEnabled: boolean): Promise<string> => {
+  if (!isImageGenerationEnabled) {
+    return "https://picsum.photos/1280/720"; // Return fallback immediately for debug mode
+  }
+  try {
+    const focusPrompt = `A vibrant, whimsical, child-friendly illustration for a storybook. Scene: ${prompt}. The main characters/objects should be clearly visible: ${words.join(', ')}. Style: storybook illustration, simple, clear. CRITICAL INSTRUCTION: The image must contain absolutely no text, no letters, no words, or writing of any kind. The output must be a pure image with no text overlay.`;
+    const response = await ai.models.generateImages({
+        model: 'imagen-4.0-generate-001',
+        prompt: focusPrompt,
+        config: {
+          numberOfImages: 1,
+          outputMimeType: 'image/jpeg',
+          aspectRatio: '16:9',
+        },
+    });
+
+    if (response.generatedImages && response.generatedImages.length > 0) {
+      const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
+      return `data:image/jpeg;base64,${base64ImageBytes}`;
+    }
+    throw new Error('Image generation failed: No images returned.');
+  } catch (error) {
+    console.error("Error generating image:", error);
+    const errorMessage = (error as any)?.error?.message || (error as any)?.message || JSON.stringify(error);
+    if (errorMessage.includes('quota exceeded') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+        alert("โควต้าสร้างภาพสำหรับวันนี้หมดแล้ว!\n\nคุณสามารถเล่นต่อโดยใช้ภาพสำรองได้ โดยไปที่ 'ตั้งค่า' และปิด 'สร้างภาพนิทาน AI' ชั่วคราวนะคะ");
+    }
+    return "https://picsum.photos/1280/720"; // Fallback image
+  }
+};
+
+export const generateInitialStoryScene = async (words: string[], language: Language, storyTone: StoryTone, isImageGenerationEnabled: boolean, aiPersonality: AIPersonality): Promise<StoryScene> => {
+  const wordList = words.join(', ');
+  const toneDescription = language === Language.TH ? STORY_TONE_THAI[storyTone] : storyTone;
+  const personalityPrompt = getPersonalityPrompt(aiPersonality, language);
+  
+  const prompt = language === Language.TH
+    ? `สร้างฉากแรกของนิทานเด็ก 5 ตอนในโทนเรื่อง "${toneDescription}" สำหรับเด็กอายุ 4-7 ปีเป็นภาษาไทย เขียนด้วยภาษาที่เรียบง่าย ประโยคสั้นๆ และเข้าใจง่ายเหมือนเล่าให้เด็กเล็กฟังจริงๆ เรื่องราวนี้จะมีโครงสร้าง 5 ส่วน: เริ่มต้น -> ผจญภัย -> อุปสรรค -> แก้ปัญหา -> จบ สำหรับฉากแรกนี้ ให้เขียนเฉพาะเนื้อเรื่องในส่วน "เริ่มต้น" โดยแนะนำฉากและตัวละครหลักอย่างเป็นธรรมชาติโดยใช้คำศัพท์เหล่านี้: ${wordList} เรื่องราวต้องเชื่อมโยงกัน มีเหตุมีผล และน่าติดตาม (ความยาว 2-4 ประโยค) ผลลัพธ์ที่ได้จะต้องเป็นเนื้อเรื่องล้วนๆ ห้ามใส่คำอธิบาย, ป้ายกำกับ (เช่น 'ฉากหลัง:'), หรือเครื่องหมาย Markdown (เช่น **) ใดๆ ทั้งสิ้น จากนั้น สร้าง "คำใบ้" 3 ตัวเลือกที่น่าสนใจและแตกต่างกันสำหรับฉากต่อไปให้เด็ก โดยใช้รูปแบบนี้: [คำใบ้ที่ 1 | คำใบ้ที่ 2 | คำใบ้ที่ 3]`
+    : `Create the first scene of a 5-part story with a "${storyTone}" tone for a 4-7 year old child. CRITICAL: Write in extremely simple, short sentences, as if speaking to a very young child. The story will follow a 5-part structure: Beginning -> Adventure -> Obstacle -> Solution -> Conclusion. For this first scene, write only the narrative for the "Beginning". Naturally introduce the setting and main characters using these vocabulary words: ${wordList}. The story must be logical, coherent, and engaging (2-4 sentences long). The output must be ONLY the narrative text. Do not include any labels (like 'Background:'), descriptive tags, or markdown formatting (like **). Then, create three distinct and engaging "hint" choices for the next scene for the child, using this format: [Hint 1 | Hint 2 | Hint 3]`;
+  
+  try {
+    const response: GenerateContentResponse = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        systemInstruction: personalityPrompt,
+      },
+    });
+    
+    let storyText = (response.text ?? '').trim();
+    if (!storyText) {
+      throw new Error("API returned empty story text for initial scene.");
+    }
+    
+    let choices: string[] | undefined;
+    const choiceRegex = /\[(.*?)\s*\|\s*(.*?)\s*\|\s*(.*?)\]/;
+    const match = storyText.match(choiceRegex);
+
+    if (match) {
+      storyText = storyText.replace(choiceRegex, '').trim();
+      choices = [match[1].trim(), match[2].trim(), match[3].trim()];
+    }
+
+    const imageUrl = await generateImage(storyText, words, isImageGenerationEnabled);
+
+    return { text: storyText, imageUrl, choices };
+  } catch (error) {
+    console.error("Error generating initial story scene:", error);
+    const fallbackText = language === Language.TH
+      ? `กาลครั้งหนึ่งนานมาแล้ว ในดินแดนมหัศจรรย์ มี ${words[0]} ที่เป็นมิตรและ ${words[1]} ที่ชาญฉลาดกำลังจะเริ่มการผจญภัยครั้งยิ่งใหญ่!`
+      : `Once upon a time, in a magical land, a friendly ${words[0]} and a wise ${words[1]} were about to start a great adventure!`;
+    const fallbackChoices = language === Language.TH ? ["สำรวจป่า", "ข้ามสะพาน", "คุยกับนก"] : ["Explore the forest", "Cross the bridge", "Talk to a bird"];
+    return {
+      text: fallbackText,
+      imageUrl: "https://picsum.photos/1280/720",
+      choices: fallbackChoices,
+    };
+  }
+};
+
+export const generateNextStoryScene = async (storyHistory: string, userChoice: string, language: Language, storyTone: StoryTone, words: string[], isImageGenerationEnabled: boolean, sceneIndex: number, aiPersonality: AIPersonality): Promise<StoryScene> => {
+  const storyConcepts: Record<string, string[]> = {
+    th: ["การผจญภัย", "อุปสรรค", "การแก้ปัญหา"],
+    en: ["Adventure", "Obstacle", "Solution"]
+  };
+  const langKey = language === Language.TH ? 'th' : 'en';
+  const currentConcept = storyConcepts[langKey][sceneIndex - 1];
+  const toneDescription = language === Language.TH ? STORY_TONE_THAI[storyTone] : storyTone;
+  const personalityPrompt = getPersonalityPrompt(aiPersonality, language);
+
+
+  const prompt = language === Language.TH
+    ? `นี่คือนิทานสำหรับเด็กอายุ 4-7 ปีในโทนเรื่อง "${toneDescription}" และมีโครงสร้าง 5 ส่วน (เริ่มต้น -> ผจญภัย -> อุปสรรค -> แก้ปัญหา -> จบ) เนื้อเรื่องจนถึงตอนนี้คือ: "${storyHistory}" เด็กได้เลือกที่จะทำสิ่งนี้ต่อไป: "${userChoice}" โปรดแต่งเรื่องราวฉากต่อไปซึ่งเป็นส่วนของ "${currentConcept}" เป็นภาษาไทย โดยต้องต่อเนื่องจากเรื่องราวก่อนหน้าอย่างสมเหตุสมผล ใช้ภาษาที่เรียบง่าย ประโยคสั้นๆ และเข้าใจง่ายเหมือนเล่าให้เด็กเล็กฟังจริงๆ ทำให้เรื่องสนุกและน่าติดตาม (ความยาว 2-4 ประโยค) ผลลัพธ์ที่ได้จะต้องเป็นเนื้อเรื่องล้วนๆ ห้ามใส่คำอธิบาย, ป้ายกำกับ, หรือเครื่องหมาย Markdown ใดๆ ทั้งสิ้น จากนั้น สร้าง "คำใบ้" 3 ตัวเลือกที่น่าสนใจและแตกต่างกันสำหรับฉากต่อไป โดยใช้รูปแบบนี้: [คำใบ้ที่ 1 | คำใบ้ที่ 2 | คำใบ้ที่ 3]`
+    : `This is a 5-part story for a 4-7 year old child with a "${storyTone}" tone (Beginning -> Adventure -> Obstacle -> Solution -> Conclusion). The story so far is: "${storyHistory}". The child chose to do this next: "${userChoice}". Please write the next scene, which is the "${currentConcept}" part of the story. CRITICAL: It must logically continue from the previous scene. Use extremely simple, short sentences, as if speaking to a very young child. Keep it fun and engaging (2-4 sentences long). The output must be ONLY the narrative text. Do not include any labels, descriptive tags, or markdown formatting. Then, create three new distinct and engaging "hint" choices for the next scene, using this format: [Hint 1 | Hint 2 | Hint 3]`;
+
+  try {
+    const response: GenerateContentResponse = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        systemInstruction: personalityPrompt,
+      },
+    });
+
+    let storyText = (response.text ?? '').trim();
+    if (!storyText) {
+      throw new Error("API returned empty story text for next scene.");
+    }
+    
+    let choices: string[] | undefined;
+
+    const choiceRegex = /\[(.*?)\s*\|\s*(.*?)\s*\|\s*(.*?)\]/;
+    const match = storyText.match(choiceRegex);
+
+    if (match) {
+      storyText = storyText.replace(choiceRegex, '').trim();
+      choices = [match[1].trim(), match[2].trim(), match[3].trim()];
+    }
+
+    const imageUrl = await generateImage(storyText, words, isImageGenerationEnabled);
+    return { text: storyText, imageUrl, choices };
+
+  } catch (error) {
+    console.error("Error generating next story scene:", error);
+     const fallbackText = language === Language.TH
+      ? "และแล้วการผจญภัยก็ดำเนินต่อไปในแบบที่คาดไม่ถึง!"
+      : "And so, the adventure continued in an unexpected way!";
+    const fallbackChoices = language === Language.TH
+      ? ["เดินทางเข้าป่า", "ไปที่ปราสาท", "ซ่อนตัวในถ้ำ"]
+      : ["Go into the forest", "Go to the castle", "Hide in a cave"];
+    return {
+      text: fallbackText,
+      imageUrl: "https://picsum.photos/1280/720",
+      choices: fallbackChoices,
+    };
+  }
+};
+
+export const generateFinalStoryScene = async (storyHistory: string, language: Language, storyTone: StoryTone, words: string[], isImageGenerationEnabled: boolean, aiPersonality: AIPersonality): Promise<StoryScene> => {
+    const toneDescription = language === Language.TH ? STORY_TONE_THAI[storyTone] : storyTone;
+    const personalityPrompt = getPersonalityPrompt(aiPersonality, language);
+    const prompt = language === Language.TH
+      ? `นี่คือนิทานสำหรับเด็กอายุ 4-7 ปีในโทนเรื่อง "${toneDescription}" เนื้อเรื่องจนถึงตอนนี้คือ: "${storyHistory}" โปรดสร้างฉาก "จบ" เพื่อสรุปเรื่องราวนี้เป็นภาษาไทย ใช้ภาษาที่เรียบง่าย ประโยคสั้นๆ และเข้าใจง่ายเหมือนเล่าให้เด็กเล็กฟังจริงๆ สรุปเรื่องราวทั้งหมดให้สมบูรณ์ โดยให้มีตอนจบที่มีความสุขและให้ข้อคิดเชิงบวกที่เข้าใจง่ายซึ่งสอดคล้องกับโทนเรื่อง (ความยาว 2-4 ประโยค) ผลลัพธ์ที่ได้จะต้องเป็นเนื้อเรื่องล้วนๆ ห้ามใส่คำอธิบาย, ป้ายกำกับ, หรือเครื่องหมาย Markdown ใดๆ ทั้งสิ้น`
+      : `This is a story for a 4-7 year old child with a "${storyTone}" tone. The story so far is: "${storyHistory}". Please create the final "Conclusion" scene to wrap up this story. CRITICAL: Use extremely simple, short sentences, as if speaking to a very young child. Conclude the entire story logically. Give it a happy ending and a simple, positive moral that fits the tone (2-4 sentences long). The output must be ONLY the narrative text. Do not include any labels, descriptive tags, or markdown formatting.`;
+
+    try {
+        const response: GenerateContentResponse = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+              systemInstruction: personalityPrompt,
+            },
+        });
+
+        const storyText = (response.text ?? '').trim();
+        if (!storyText) {
+          throw new Error("API returned empty story text for final scene.");
+        }
+        const imageUrl = await generateImage(storyText, words, isImageGenerationEnabled);
+
+        return { text: storyText, imageUrl };
+    } catch (error) {
+        console.error("Error generating final story scene:", error);
+        const fallbackText = language === Language.TH
+          ? "และแล้วทุกคนก็ได้อยู่ด้วยกันอย่างมีความสุข หลังจากได้เรียนรู้บทเรียนล้ำค่าเกี่ยวกับมิตรภาพ"
+          : "And they all lived happily ever after, having learned a valuable lesson about friendship.";
+        return {
+            text: fallbackText,
+            imageUrl: "https://picsum.photos/1280/720",
+        };
+    }
+};

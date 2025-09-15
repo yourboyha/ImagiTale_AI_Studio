@@ -1,0 +1,7 @@
+{
+  "name": "ImagiTale",
+  "description": "An immersive English learning journey for children aged 4-7, transforming vocabulary practice into an interactive storytelling adventure powered by AI.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
