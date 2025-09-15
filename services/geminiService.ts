@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
 import { StoryScene, Language, Word, WordCategory, StoryTone, AIPersonality } from '../types';
 import { VOCABULARY, STORY_TONE_THAI } from '../constants';
@@ -80,7 +79,7 @@ Example: [{"thai": "สุนัข", "english": "dog"}]`;
 
 export const generateVocabImage = async (word: string): Promise<string> => {
   try {
-    const prompt = `A very simple, clear, child-friendly illustration of ONLY the object: "${word}". White background. Centered object. Vibrant colors. CRITICAL INSTRUCTION: Do not include any text, letters, or words in the image. The output must be purely pictorial.`;
+    const prompt = `A very simple, child-friendly illustration of ONLY: "${word}". White background. Style: simple shapes, vibrant colors, centered object. CRITICAL COMMAND: This image must contain ABSOLUTELY NO text, NO letters, NO words, and NO writing of any kind. The output must be a pure, text-free picture.`;
     const response = await ai.models.generateImages({
         model: 'imagen-4.0-generate-001',
         prompt: prompt,
@@ -111,7 +110,7 @@ const generateImage = async (prompt: string, words: string[], isImageGenerationE
     return "https://picsum.photos/1280/720"; // Return fallback immediately for debug mode
   }
   try {
-    const focusPrompt = `A vibrant, whimsical, child-friendly illustration for a storybook. Scene: ${prompt}. The main characters/objects should be clearly visible: ${words.join(', ')}. Style: storybook illustration, simple, clear. CRITICAL INSTRUCTION: The image must contain absolutely no text, no letters, no words, or writing of any kind. The output must be a pure image with no text overlay.`;
+    const focusPrompt = `A vibrant, whimsical, child-friendly storybook illustration. Scene: ${prompt}. The main elements should be clear: ${words.join(', ')}. Style: simple, colorful storybook art. CRITICAL COMMAND: The image must contain ABSOLUTELY NO text, NO letters, NO words, and NO writing of any kind. The final output must be a pure, text-free picture.`;
     const response = await ai.models.generateImages({
         model: 'imagen-4.0-generate-001',
         prompt: focusPrompt,
@@ -143,8 +142,8 @@ export const generateInitialStoryScene = async (words: string[], language: Langu
   const personalityPrompt = getPersonalityPrompt(aiPersonality, language);
   
   const prompt = language === Language.TH
-    ? `สร้างฉากแรกของนิทานเด็ก 5 ตอนในโทนเรื่อง "${toneDescription}" สำหรับเด็กอายุ 4-7 ปีเป็นภาษาไทย เขียนด้วยภาษาที่เรียบง่าย ประโยคสั้นๆ และเข้าใจง่ายเหมือนเล่าให้เด็กเล็กฟังจริงๆ เรื่องราวนี้จะมีโครงสร้าง 5 ส่วน: เริ่มต้น -> ผจญภัย -> อุปสรรค -> แก้ปัญหา -> จบ สำหรับฉากแรกนี้ ให้เขียนเฉพาะเนื้อเรื่องในส่วน "เริ่มต้น" โดยแนะนำฉากและตัวละครหลักอย่างเป็นธรรมชาติโดยใช้คำศัพท์เหล่านี้: ${wordList} เรื่องราวต้องเชื่อมโยงกัน มีเหตุมีผล และน่าติดตาม (ความยาว 2-4 ประโยค) ผลลัพธ์ที่ได้จะต้องเป็นเนื้อเรื่องล้วนๆ ห้ามใส่คำอธิบาย, ป้ายกำกับ (เช่น 'ฉากหลัง:'), หรือเครื่องหมาย Markdown (เช่น **) ใดๆ ทั้งสิ้น จากนั้น สร้าง "คำใบ้" 3 ตัวเลือกที่น่าสนใจและแตกต่างกันสำหรับฉากต่อไปให้เด็ก โดยใช้รูปแบบนี้: [คำใบ้ที่ 1 | คำใบ้ที่ 2 | คำใบ้ที่ 3]`
-    : `Create the first scene of a 5-part story with a "${storyTone}" tone for a 4-7 year old child. CRITICAL: Write in extremely simple, short sentences, as if speaking to a very young child. The story will follow a 5-part structure: Beginning -> Adventure -> Obstacle -> Solution -> Conclusion. For this first scene, write only the narrative for the "Beginning". Naturally introduce the setting and main characters using these vocabulary words: ${wordList}. The story must be logical, coherent, and engaging (2-4 sentences long). The output must be ONLY the narrative text. Do not include any labels (like 'Background:'), descriptive tags, or markdown formatting (like **). Then, create three distinct and engaging "hint" choices for the next scene for the child, using this format: [Hint 1 | Hint 2 | Hint 3]`;
+    ? `สร้างฉากแรกของนิทานเด็ก 5 ตอนในโทนเรื่อง "${toneDescription}" สำหรับเด็กอายุ 4-7 ปีเป็นภาษาไทย เขียนด้วยภาษาที่เรียบง่าย ประโยคสั้นๆ และเข้าใจง่ายเหมือนเล่าให้เด็กเล็กฟังจริงๆ เรื่องราวนี้จะมีโครงสร้าง 5 ส่วน: เริ่มต้น -> ผจญภัย -> อุปสรรค -> แก้ปัญหา -> จบ สำหรับฉากแรกนี้ ให้เขียนเฉพาะเนื้อเรื่องในส่วน "เริ่มต้น" โดยแนะนำฉากและตัวละครหลักอย่างเป็นธรรมชาติโดยใช้คำศัพท์เหล่านี้: ${wordList} เรื่องราวต้องเชื่อมโยงกัน มีเหตุมีผล และน่าติดตาม (ความยาว 2-4 ประโยค) คำสั่งสำคัญ: ผลลัพธ์ที่ได้จะต้องเป็นเนื้อเรื่องล้วนๆ และต้องขึ้นต้นด้วยเนื้อเรื่องทันที ห้ามมีคำอธิบาย, ป้ายกำกับ (เช่น 'ฉากหลัง:'), หรือเครื่องหมาย Markdown (เช่น **) ใดๆ ทั้งสิ้น จากนั้น ให้สร้าง "คำใบ้" 3 ตัวเลือกที่น่าสนใจและแตกต่างกันสำหรับฉากต่อไปให้เด็ก โดยต้องอยู่ในรูปแบบนี้เท่านั้น: [คำใบ้ที่ 1 | คำใบ้ที่ 2 | คำใบ้ที่ 3] โดยห้ามมีข้อความอื่นใดนอกวงเล็บนี้`
+    : `Create the first scene of a 5-part story with a "${storyTone}" tone for a 4-7 year old child. CRITICAL: Write in extremely simple, short sentences, as if speaking to a very young child. The story will follow a 5-part structure: Beginning -> Adventure -> Obstacle -> Solution -> Conclusion. For this first scene, write only the narrative for the "Beginning". Naturally introduce the setting and main characters using these vocabulary words: ${wordList}. The story must be logical, coherent, and engaging (2-4 sentences long). CRITICAL: The output must begin *directly* with the story narrative, with no preamble. The output must be ONLY the narrative text. Do not include any labels (like 'Background:'), descriptive tags, or markdown formatting (like **). After the narrative, create three distinct and engaging "hint" choices for the next scene for the child. The choices MUST be in this exact format and nothing else: [Hint 1 | Hint 2 | Hint 3]`;
   
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
@@ -198,8 +197,8 @@ export const generateNextStoryScene = async (storyHistory: string, userChoice: s
 
 
   const prompt = language === Language.TH
-    ? `นี่คือนิทานสำหรับเด็กอายุ 4-7 ปีในโทนเรื่อง "${toneDescription}" และมีโครงสร้าง 5 ส่วน (เริ่มต้น -> ผจญภัย -> อุปสรรค -> แก้ปัญหา -> จบ) เนื้อเรื่องจนถึงตอนนี้คือ: "${storyHistory}" เด็กได้เลือกที่จะทำสิ่งนี้ต่อไป: "${userChoice}" โปรดแต่งเรื่องราวฉากต่อไปซึ่งเป็นส่วนของ "${currentConcept}" เป็นภาษาไทย โดยต้องต่อเนื่องจากเรื่องราวก่อนหน้าอย่างสมเหตุสมผล ใช้ภาษาที่เรียบง่าย ประโยคสั้นๆ และเข้าใจง่ายเหมือนเล่าให้เด็กเล็กฟังจริงๆ ทำให้เรื่องสนุกและน่าติดตาม (ความยาว 2-4 ประโยค) ผลลัพธ์ที่ได้จะต้องเป็นเนื้อเรื่องล้วนๆ ห้ามใส่คำอธิบาย, ป้ายกำกับ, หรือเครื่องหมาย Markdown ใดๆ ทั้งสิ้น จากนั้น สร้าง "คำใบ้" 3 ตัวเลือกที่น่าสนใจและแตกต่างกันสำหรับฉากต่อไป โดยใช้รูปแบบนี้: [คำใบ้ที่ 1 | คำใบ้ที่ 2 | คำใบ้ที่ 3]`
-    : `This is a 5-part story for a 4-7 year old child with a "${storyTone}" tone (Beginning -> Adventure -> Obstacle -> Solution -> Conclusion). The story so far is: "${storyHistory}". The child chose to do this next: "${userChoice}". Please write the next scene, which is the "${currentConcept}" part of the story. CRITICAL: It must logically continue from the previous scene. Use extremely simple, short sentences, as if speaking to a very young child. Keep it fun and engaging (2-4 sentences long). The output must be ONLY the narrative text. Do not include any labels, descriptive tags, or markdown formatting. Then, create three new distinct and engaging "hint" choices for the next scene, using this format: [Hint 1 | Hint 2 | Hint 3]`;
+    ? `นี่คือนิทานสำหรับเด็กอายุ 4-7 ปีในโทนเรื่อง "${toneDescription}" และมีโครงสร้าง 5 ส่วน (เริ่มต้น -> ผจญภัย -> อุปสรรค -> แก้ปัญหา -> จบ) เนื้อเรื่องจนถึงตอนนี้คือ: "${storyHistory}" เด็กได้เลือกที่จะทำสิ่งนี้ต่อไป: "${userChoice}" โปรดแต่งเรื่องราวฉากต่อไปซึ่งเป็นส่วนของ "${currentConcept}" เป็นภาษาไทย โดยต้องต่อเนื่องจากเรื่องราวก่อนหน้าอย่างสมเหตุสมผล ใช้ภาษาที่เรียบง่าย ประโยคสั้นๆ และเข้าใจง่ายเหมือนเล่าให้เด็กเล็กฟังจริงๆ ทำให้เรื่องสนุกและน่าติดตาม (ความยาว 2-4 ประโยค) คำสั่งสำคัญ: ผลลัพธ์ที่ได้จะต้องเป็นเนื้อเรื่องล้วนๆ และต้องขึ้นต้นด้วยเนื้อเรื่องทันที ห้ามมีคำอธิบาย, ป้ายกำกับ, หรือเครื่องหมาย Markdown ใดๆ ทั้งสิ้น จากนั้น ให้สร้าง "คำใบ้" 3 ตัวเลือกที่น่าสนใจและแตกต่างกันสำหรับฉากต่อไป โดยต้องอยู่ในรูปแบบนี้เท่านั้น: [คำใบ้ที่ 1 | คำใบ้ที่ 2 | คำใบ้ที่ 3] โดยห้ามมีข้อความอื่นใดนอกวงเล็บนี้`
+    : `This is a 5-part story for a 4-7 year old child with a "${storyTone}" tone (Beginning -> Adventure -> Obstacle -> Solution -> Conclusion). The story so far is: "${storyHistory}". The child chose to do this next: "${userChoice}". Please write the next scene, which is the "${currentConcept}" part of the story. CRITICAL: It must logically continue from the previous scene. Use extremely simple, short sentences, as if speaking to a very young child. Keep it fun and engaging (2-4 sentences long). CRITICAL: The output must begin *directly* with the story narrative, with no preamble. The output must be ONLY the narrative text. Do not include any labels, descriptive tags, or markdown formatting. After the narrative, create three new distinct and engaging "hint" choices for the next scene. The choices MUST be in this exact format and nothing else: [Hint 1 | Hint 2 | Hint 3]`;
 
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
@@ -248,8 +247,8 @@ export const generateFinalStoryScene = async (storyHistory: string, language: La
     const toneDescription = language === Language.TH ? STORY_TONE_THAI[storyTone] : storyTone;
     const personalityPrompt = getPersonalityPrompt(aiPersonality, language);
     const prompt = language === Language.TH
-      ? `นี่คือนิทานสำหรับเด็กอายุ 4-7 ปีในโทนเรื่อง "${toneDescription}" เนื้อเรื่องจนถึงตอนนี้คือ: "${storyHistory}" โปรดสร้างฉาก "จบ" เพื่อสรุปเรื่องราวนี้เป็นภาษาไทย ใช้ภาษาที่เรียบง่าย ประโยคสั้นๆ และเข้าใจง่ายเหมือนเล่าให้เด็กเล็กฟังจริงๆ สรุปเรื่องราวทั้งหมดให้สมบูรณ์ โดยให้มีตอนจบที่มีความสุขและให้ข้อคิดเชิงบวกที่เข้าใจง่ายซึ่งสอดคล้องกับโทนเรื่อง (ความยาว 2-4 ประโยค) ผลลัพธ์ที่ได้จะต้องเป็นเนื้อเรื่องล้วนๆ ห้ามใส่คำอธิบาย, ป้ายกำกับ, หรือเครื่องหมาย Markdown ใดๆ ทั้งสิ้น`
-      : `This is a story for a 4-7 year old child with a "${storyTone}" tone. The story so far is: "${storyHistory}". Please create the final "Conclusion" scene to wrap up this story. CRITICAL: Use extremely simple, short sentences, as if speaking to a very young child. Conclude the entire story logically. Give it a happy ending and a simple, positive moral that fits the tone (2-4 sentences long). The output must be ONLY the narrative text. Do not include any labels, descriptive tags, or markdown formatting.`;
+      ? `นี่คือนิทานสำหรับเด็กอายุ 4-7 ปีในโทนเรื่อง "${toneDescription}" เนื้อเรื่องจนถึงตอนนี้คือ: "${storyHistory}" โปรดสร้างฉาก "จบ" เพื่อสรุปเรื่องราวนี้เป็นภาษาไทย ใช้ภาษาที่เรียบง่าย ประโยคสั้นๆ และเข้าใจง่ายเหมือนเล่าให้เด็กเล็กฟังจริงๆ สรุปเรื่องราวทั้งหมดให้สมบูรณ์ โดยให้มีตอนจบที่มีความสุขและให้ข้อคิดเชิงบวกที่เข้าใจง่ายซึ่งสอดคล้องกับโทนเรื่อง (ความยาว 2-4 ประโยค) คำสั่งสำคัญ: ผลลัพธ์ที่ได้จะต้องเป็นเนื้อเรื่องล้วนๆ และต้องขึ้นต้นด้วยเนื้อเรื่องทันที ห้ามมีคำอธิบาย, ป้ายกำกับ, หรือเครื่องหมาย Markdown (เช่น **) ใดๆ ทั้งสิ้น`
+      : `This is a story for a 4-7 year old child with a "${storyTone}" tone. The story so far is: "${storyHistory}". Please create the final "Conclusion" scene to wrap up this story. CRITICAL: Use extremely simple, short sentences, as if speaking to a very young child. Conclude the entire story logically. Give it a happy ending and a simple, positive moral that fits the tone (2-4 sentences long). CRITICAL: The output must begin *directly* with the story narrative, with no preamble. The output must be ONLY the narrative text. Do not include any labels, descriptive tags, or markdown formatting.`;
 
     try {
         const response: GenerateContentResponse = await ai.models.generateContent({
@@ -277,4 +276,26 @@ export const generateFinalStoryScene = async (storyHistory: string, language: La
             imageUrl: "https://picsum.photos/1280/720",
         };
     }
+};
+
+export const generateStoryTitle = async (storyHistory: string, language: Language): Promise<string> => {
+  const prompt = language === Language.TH
+    ? `จากนิทานสำหรับเด็กเรื่องนี้ ให้อ่านและตั้งชื่อเรื่องที่สั้น กระชับ และน่ารัก เหมาะสำหรับเด็กอายุ 4-7 ปี เป็นภาษาไทย เนื้อเรื่อง: '${storyHistory}' ผลลัพธ์ที่ได้จะต้องเป็นชื่อเรื่องเท่านั้น ห้ามมีข้อความอื่นใดๆ`
+    : `Based on this short children's story, create a very short, simple, and sweet title in English suitable for a 4-7 year old. The story is: '${storyHistory}'. The output MUST be ONLY the title text, nothing else.`;
+
+  try {
+    const response: GenerateContentResponse = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+    });
+
+    const title = (response.text ?? '').trim().replace(/"/g, ''); // Remove quotes
+    if (!title) {
+      throw new Error("API returned empty title.");
+    }
+    return title;
+  } catch (error) {
+    console.error("Error generating story title:", error);
+    return language === Language.TH ? "นิทานของฉัน" : "My Story";
+  }
 };

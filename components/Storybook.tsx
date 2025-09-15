@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Word, StoryScene, Language, StoryTone, AIPersonality } from '../types';
-import { generateInitialStoryScene, generateNextStoryScene, generateFinalStoryScene } from '../services/geminiService';
+import { generateInitialStoryScene, generateNextStoryScene, generateFinalStoryScene, generateStoryTitle } from '../services/geminiService';
 import { STORY_FOLLOW_UP_QUESTIONS_TH, STORY_FOLLOW_UP_QUESTIONS_EN } from '../constants';
 import MicrophoneIcon from './icons/MicrophoneIcon';
 import StopIcon from './icons/StopIcon';
 import SpeakerIcon from './icons/SpeakerIcon';
 import SpeakerOffIcon from './icons/SpeakerOffIcon';
+import DownloadIcon from './icons/DownloadIcon';
 
 // @ts-ignore
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -29,6 +30,8 @@ const Storybook: React.FC<StorybookProps> = ({ words, onComplete, language, stor
   const [displayedText, setDisplayedText] = useState('');
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [storyTitle, setStoryTitle] = useState<string | null>(null);
+  const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
 
   const recognitionRef = useRef(SpeechRecognition ? new SpeechRecognition() : null);
   const storySoFar = scenes.map(s => s.text).join(' ');
@@ -167,6 +170,22 @@ const Storybook: React.FC<StorybookProps> = ({ words, onComplete, language, stor
     return cleanupListeners;
   }, []);
   
+  // Effect to generate story title when story is complete
+  useEffect(() => {
+    if (scenes.length >= 5 && !storyTitle && !isGeneratingTitle) {
+      const fetchTitle = async () => {
+        setIsGeneratingTitle(true);
+        const fullStory = scenes.map(s => s.text).join(' ');
+        const title = await generateStoryTitle(fullStory, language);
+        if (isMounted.current) {
+          setStoryTitle(title);
+          setIsGeneratingTitle(false);
+        }
+      };
+      fetchTitle();
+    }
+  }, [scenes, language, storyTitle, isGeneratingTitle]);
+
   const currentScene = scenes[currentSceneIndex];
 
   const processSpeech = useCallback((finalTranscript: string) => {
@@ -332,6 +351,63 @@ const Storybook: React.FC<StorybookProps> = ({ words, onComplete, language, stor
     };
   };
 
+  const handleDownload = () => {
+    if (!storyTitle || scenes.length < 5) return;
+
+    const storyHtml = `
+      <html>
+        <head>
+          <title>${storyTitle}</title>
+          <style>
+            body { font-family: 'Open Sans', sans-serif; margin: 0; }
+            @media print {
+              .page { page-break-after: always; }
+              @page { size: A4 landscape; margin: 1in; }
+            }
+            .page {
+              width: 100%;
+              height: 100vh;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              padding: 40px;
+              box-sizing: border-box;
+            }
+            .title-page h1 { font-size: 3em; text-align: center; }
+            .title-page img { max-width: 60%; margin-top: 20px; border-radius: 15px; }
+            .story-page img { max-width: 90%; max-height: 55vh; object-fit: contain; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+            .story-page p { text-align: center; margin-top: 25px; font-size: 1.5em; max-width: 80%; line-height: 1.6; }
+          </style>
+        </head>
+        <body>
+          <div class="page title-page">
+            <h1>${storyTitle}</h1>
+            <img src="${scenes[0].imageUrl}" alt="Cover Image">
+          </div>
+          ${scenes.map((scene, index) => `
+            <div class="page story-page">
+              <img src="${scene.imageUrl}" alt="Scene ${index + 1}">
+              <p>${scene.text}</p>
+            </div>
+          `).join('')}
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.open();
+      printWindow.document.write(storyHtml);
+      printWindow.document.close();
+      printWindow.onload = () => {
+        printWindow.focus();
+        printWindow.print();
+      };
+    }
+  };
+
+
   if (isLoading && scenes.length === 0) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center bg-purple-900 text-white p-8">
@@ -427,9 +503,15 @@ const Storybook: React.FC<StorybookProps> = ({ words, onComplete, language, stor
                   )}
                   
                   {scenes.length >= 5 && !currentScene?.choices && (
-                    <button onClick={onComplete} disabled={areButtonsDisabled || isListening} className="w-full mt-2 px-8 py-4 text-white font-bold text-xl rounded-xl shadow-lg transform hover:scale-105 transition-all duration-300 ease-in-out bg-gradient-to-br from-green-500 to-teal-500 hover:from-green-600 hover:to-teal-600 border-b-4 border-green-700 active:border-b-2 disabled:opacity-50">
-                      จบแล้ว! เล่นอีกครั้งไหม?
-                    </button>
+                    <div className="w-full flex flex-col sm:flex-row items-center justify-center gap-4 mt-2">
+                      <button onClick={onComplete} disabled={areButtonsDisabled || isListening} className="w-full sm:w-auto px-8 py-4 text-white font-bold text-xl rounded-xl shadow-lg transform hover:scale-105 transition-all duration-300 ease-in-out bg-gradient-to-br from-green-500 to-teal-500 hover:from-green-600 hover:to-teal-600 border-b-4 border-green-700 active:border-b-2 disabled:opacity-50">
+                        เล่นอีกครั้ง!
+                      </button>
+                      <button onClick={handleDownload} disabled={areButtonsDisabled || isGeneratingTitle || !storyTitle} className="w-full sm:w-auto flex items-center justify-center gap-3 px-8 py-4 text-white font-bold text-xl rounded-xl shadow-lg transform hover:scale-105 transition-all duration-300 ease-in-out bg-gradient-to-br from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 border-b-4 border-blue-700 active:border-b-2 disabled:opacity-50">
+                        <DownloadIcon />
+                        <span>{isGeneratingTitle ? 'กำลังตั้งชื่อเรื่อง...' : 'บันทึกนิทาน'}</span>
+                      </button>
+                    </div>
                   )}
                 </div>
               )}

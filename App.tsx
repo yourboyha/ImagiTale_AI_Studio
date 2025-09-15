@@ -26,13 +26,27 @@ interface ModeSelectionScreenProps {
 const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({ onStart, onSkip, showSkipButton, speak }) => {
   const [language, setLanguage] = useState<Language>(Language.TH);
   const [category, setCategory] = useState<WordCategory>(WordCategory.ANIMALS_NATURE);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const isComponentMounted = useRef(true);
 
-  const handleOptionClick = (value: any, type: 'lang' | 'cat', textToSpeak: string) => {
-    speak(textToSpeak, type === 'lang' ? value : language);
-    if (type === 'lang') {
-      setLanguage(value);
-    } else {
-      setCategory(value);
+  useEffect(() => {
+    isComponentMounted.current = true;
+    return () => { isComponentMounted.current = false; };
+  }, []);
+
+  const handleOptionClick = async (value: any, type: 'lang' | 'cat', textToSpeak: string) => {
+    if (isSpeaking) return;
+
+    setIsSpeaking(true);
+    await speak(textToSpeak, type === 'lang' ? value : language);
+
+    if (isComponentMounted.current) {
+      if (type === 'lang') {
+        setLanguage(value);
+      } else {
+        setCategory(value);
+      }
+      setIsSpeaking(false);
     }
   };
 
@@ -48,7 +62,7 @@ const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({ onStart, onSk
                   const langText = lang === Language.TH ? 'ภาษาไทย' : 'English';
                   const isSelected = language === lang;
                   return (
-                    <button key={lang} onClick={() => handleOptionClick(lang, 'lang', langText)} className={`relative px-8 py-3 rounded-full text-xl font-bold transition-all ${isSelected ? 'bg-purple-600 text-white shadow-lg scale-105' : 'bg-white hover:bg-purple-100'}`}>
+                    <button key={lang} onClick={() => handleOptionClick(lang, 'lang', langText)} disabled={isSpeaking} className={`relative px-8 py-3 rounded-full text-xl font-bold transition-all disabled:opacity-60 disabled:cursor-not-allowed ${isSelected ? 'bg-purple-600 text-white shadow-lg scale-105' : 'bg-white hover:bg-purple-100'}`}>
                       <span>{langText}</span>
                     </button>
                   );
@@ -63,7 +77,7 @@ const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({ onStart, onSk
                     const catText = WORD_CATEGORY_THAI[cat];
                     const isSelected = category === cat;
                     return (
-                      <button key={cat} onClick={() => handleOptionClick(cat, 'cat', catText)} className={`relative p-4 rounded-xl font-semibold text-center transition-all ${isSelected ? 'bg-yellow-400 text-gray-800 shadow-lg scale-105' : 'bg-white hover:bg-yellow-100'}`}>
+                      <button key={cat} onClick={() => handleOptionClick(cat, 'cat', catText)} disabled={isSpeaking} className={`relative p-4 rounded-xl font-semibold text-center transition-all disabled:opacity-60 disabled:cursor-not-allowed ${isSelected ? 'bg-yellow-400 text-gray-800 shadow-lg scale-105' : 'bg-white hover:bg-yellow-100'}`}>
                          <span>{catText}</span>
                       </button>
                     );
@@ -71,11 +85,11 @@ const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({ onStart, onSk
             </div>
         </div>
         
-        <button onClick={() => onStart(language, category)} className="w-full px-10 py-5 bg-green-500 text-white text-3xl font-bold rounded-2xl shadow-2xl hover:bg-green-600 transform hover:scale-105 transition-all duration-300 ease-in-out">
+        <button onClick={() => onStart(language, category)} disabled={isSpeaking} className="w-full px-10 py-5 bg-green-500 text-white text-3xl font-bold rounded-2xl shadow-2xl hover:bg-green-600 transform hover:scale-105 transition-all duration-300 ease-in-out disabled:opacity-60 disabled:cursor-not-allowed">
             ไปกันเลย!
         </button>
         {showSkipButton && (
-          <button onClick={() => onSkip(language, category)} className="mt-4 w-full px-8 py-3 bg-gray-600 text-white text-lg font-semibold rounded-xl shadow-lg hover:bg-gray-700 transition-all">
+          <button onClick={() => onSkip(language, category)} disabled={isSpeaking} className="mt-4 w-full px-8 py-3 bg-gray-600 text-white text-lg font-semibold rounded-xl shadow-lg hover:bg-gray-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed">
               ข้ามไปที่โหมดนิทาน (Debug)
           </button>
         )}
@@ -140,6 +154,13 @@ interface StoryToneSelectionScreenProps {
 }
 const StoryToneSelectionScreen: React.FC<StoryToneSelectionScreenProps> = ({ onSelect, speak, currentLanguage }) => {
   const [selectedTone, setSelectedTone] = useState<StoryTone>(StoryTone.ADVENTURE);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const isComponentMounted = useRef(true);
+
+  useEffect(() => {
+    isComponentMounted.current = true;
+    return () => { isComponentMounted.current = false; };
+  }, []);
 
   const toneDetails: Record<StoryTone, { icon: React.FC; colors: string; }> = {
     [StoryTone.ADVENTURE]: { icon: AdventureIcon, colors: 'bg-orange-500 hover:bg-orange-600 border-b-4 border-orange-700' },
@@ -150,9 +171,16 @@ const StoryToneSelectionScreen: React.FC<StoryToneSelectionScreenProps> = ({ onS
     [StoryTone.RELATIONSHIPS]: { icon: RelationshipsIcon, colors: 'bg-red-500 hover:bg-red-600 border-b-4 border-red-700' },
   };
 
-  const handleToneClick = (tone: StoryTone) => {
-    speak(STORY_TONE_THAI[tone], currentLanguage);
-    setSelectedTone(tone);
+  const handleToneClick = async (tone: StoryTone) => {
+    if (isSpeaking) return;
+
+    setIsSpeaking(true);
+    await speak(STORY_TONE_THAI[tone], currentLanguage);
+
+    if (isComponentMounted.current) {
+      setSelectedTone(tone);
+      setIsSpeaking(false);
+    }
   };
 
   return (
@@ -169,7 +197,8 @@ const StoryToneSelectionScreen: React.FC<StoryToneSelectionScreenProps> = ({ onS
              <button
                 key={tone}
                 onClick={() => handleToneClick(tone)}
-                className={`relative flex items-center justify-start gap-4 p-5 rounded-2xl text-white font-bold text-xl text-left transition-all transform hover:scale-105 shadow-lg hover:shadow-2xl focus:outline-none active:border-b-2 active:translate-y-1 ${colorClasses} ${isSelected ? 'ring-4 ring-offset-4 ring-yellow-400 ring-offset-blue-50' : 'focus:ring-4 focus:ring-yellow-400 focus:ring-offset-2'}`}
+                disabled={isSpeaking}
+                className={`relative flex items-center justify-start gap-4 p-5 rounded-2xl text-white font-bold text-xl text-left transition-all transform hover:scale-105 shadow-lg hover:shadow-2xl focus:outline-none active:border-b-2 active:translate-y-1 ${colorClasses} ${isSelected ? 'ring-4 ring-offset-4 ring-yellow-400 ring-offset-blue-50' : 'focus:ring-4 focus:ring-yellow-400 focus:ring-offset-2'} disabled:opacity-60 disabled:cursor-not-allowed`}
                 aria-label={STORY_TONE_THAI[tone]}
               >
                 <div className={`flex items-center gap-4`}>
@@ -183,7 +212,8 @@ const StoryToneSelectionScreen: React.FC<StoryToneSelectionScreenProps> = ({ onS
         <div className="mt-10">
           <button 
             onClick={() => onSelect(selectedTone)}
-            className="px-10 py-5 bg-green-500 text-white text-3xl font-bold rounded-2xl shadow-2xl hover:bg-green-600 transform hover:scale-105 transition-all duration-300 ease-in-out"
+            disabled={isSpeaking}
+            className="px-10 py-5 bg-green-500 text-white text-3xl font-bold rounded-2xl shadow-2xl hover:bg-green-600 transform hover:scale-105 transition-all duration-300 ease-in-out disabled:opacity-60 disabled:cursor-not-allowed"
           >
             เริ่มนิทาน!
           </button>
