@@ -1,5 +1,5 @@
 
-import React, { Fragment } from 'react';
+import React from 'react';
 import { Language, StoryTone, AIVoice } from '../types';
 import { STORY_TONE_THAI } from '../constants';
 import CloseIcon from './icons/CloseIcon';
@@ -21,6 +21,7 @@ interface SettingsModalProps {
   setAiVoice: (voice: AIVoice) => void;
   isImageGenerationEnabled: boolean;
   setIsImageGenerationEnabled: (enabled: boolean) => void;
+  playMenuSound: () => void;
 }
 
 const toneIcons: Record<StoryTone, React.ReactNode> = {
@@ -43,8 +44,29 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   setAiVoice,
   isImageGenerationEnabled,
   setIsImageGenerationEnabled,
+  playMenuSound,
 }) => {
   if (!isOpen) return null;
+
+  const handleLanguageChange = (lang: Language) => {
+    playMenuSound();
+    setLanguage(lang);
+  };
+
+  const handleVoiceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    playMenuSound();
+    setAiVoice(e.target.value as AIVoice);
+  };
+
+  const handleToneChange = (tone: StoryTone) => {
+    playMenuSound();
+    setStoryTone(tone);
+  };
+  
+  const handleImageToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+    playMenuSound();
+    setIsImageGenerationEnabled(e.target.checked);
+  };
 
   return (
     <div 
@@ -73,13 +95,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           <fieldset>
             <legend className="text-lg font-semibold text-gray-700 mb-2">ภาษา</legend>
             <div className="flex gap-4">
-              {(Object.keys(Language) as Array<keyof typeof Language>).map(key => (
+              {/* FIX: Iterate over enum values directly for better type safety. */}
+              {(Object.values(Language)).map(langValue => (
                 <button
-                  key={key}
-                  onClick={() => setLanguage(Language[key])}
-                  className={`flex-1 p-3 rounded-lg border-2 transition-all ${language === Language[key] ? 'bg-purple-600 text-white border-purple-600 shadow-md' : 'bg-gray-100 hover:bg-gray-200 border-gray-200'}`}
+                  key={langValue}
+                  onClick={() => handleLanguageChange(langValue)}
+                  className={`flex-1 p-3 rounded-lg border-2 transition-all ${language === langValue ? 'bg-purple-600 text-white border-purple-600 shadow-md' : 'bg-gray-100 hover:bg-gray-200 border-gray-200'}`}
                 >
-                  {Language[key] === Language.TH ? '🇹🇭 ภาษาไทย' : '🇬🇧 English'}
+                  {langValue === Language.TH ? '🇹🇭 ภาษาไทย' : '🇬🇧 English'}
                 </button>
               ))}
             </div>
@@ -90,11 +113,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
              <legend className="text-lg font-semibold text-gray-700 mb-2">เสียง AI</legend>
              <select
                 value={aiVoice}
-                onChange={(e) => setAiVoice(e.target.value as AIVoice)}
+                onChange={handleVoiceChange}
                 className="w-full p-3 bg-gray-100 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
              >
-                {(Object.keys(AIVoice) as Array<keyof typeof AIVoice>).map(key => (
-                    <option key={key} value={AIVoice[key]}>{AIVoice[key]}</option>
+                {/* FIX: Iterate over enum values directly for better type safety. */}
+                {(Object.values(AIVoice)).map(voiceValue => (
+                    <option key={voiceValue} value={voiceValue}>{voiceValue}</option>
                 ))}
              </select>
           </fieldset>
@@ -103,14 +127,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           <fieldset>
             <legend className="text-lg font-semibold text-gray-700 mb-2">แนวของนิทาน</legend>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {(Object.keys(StoryTone) as Array<keyof typeof StoryTone>).map(key => (
+                {/* FIX: Iterate over enum values directly for better type safety. */}
+                {(Object.values(StoryTone)).map(toneValue => (
                     <button
-                        key={key}
-                        onClick={() => setStoryTone(StoryTone[key])}
-                        className={`flex flex-col items-center justify-center gap-2 p-3 rounded-lg border-2 text-center transition-all ${storyTone === StoryTone[key] ? 'bg-purple-600 text-white border-purple-600 shadow-md' : 'bg-gray-100 hover:bg-gray-200 border-gray-200'}`}
+                        key={toneValue}
+                        onClick={() => handleToneChange(toneValue)}
+                        className={`flex flex-col items-center justify-center gap-2 p-3 rounded-lg border-2 text-center transition-all ${storyTone === toneValue ? 'bg-purple-600 text-white border-purple-600 shadow-md' : 'bg-gray-100 hover:bg-gray-200 border-gray-200'}`}
                     >
-                        <div className="h-10 w-10">{toneIcons[StoryTone[key]]}</div>
-                        <span className="font-semibold text-sm">{STORY_TONE_THAI[StoryTone[key]]}</span>
+                        <div className="h-10 w-10">{toneIcons[toneValue]}</div>
+                        <span className="font-semibold text-sm">{STORY_TONE_THAI[toneValue]}</span>
                     </button>
                 ))}
             </div>
@@ -129,7 +154,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   id="image-toggle"
                   className="sr-only peer" 
                   checked={isImageGenerationEnabled}
-                  onChange={e => setIsImageGenerationEnabled(e.target.checked)} 
+                  onChange={handleImageToggle}
                 />
                 <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
               </label>

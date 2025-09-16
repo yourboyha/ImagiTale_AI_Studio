@@ -1,40 +1,52 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import HomeScreen from './components/HomeScreen';
 import VocabTrainer from './components/VocabTrainer';
 import Storybook from './components/Storybook';
 import SettingsModal from './components/SettingsModal';
 import SettingsIcon from './components/icons/SettingsIcon';
-import HomeIcon from './components/icons/HomeIcon';
-import { Language, StoryTone, Word, WordCategory, PreloadedWord, AIVoice } from './types';
-import { VOCABULARY, MAX_WORDS_PER_ROUND } from './constants';
-import { generateVocabularyList, generateVocabImage } from './services/geminiService';
+import { GameScreen, Language, StoryTone, AIVoice, Word } from './types';
 
-type GameState = 'home' | 'vocab' | 'story';
+// This is our new single point of contact with our secure backend.
+const API_ENDPOINT = '/.netlify/functions/generate-speech';
 
 const App: React.FC = () => {
-  const [gameState, setGameState] = useState<GameState>('home');
-  const [round, setRound] = useState(1);
-  const [collectedWords, setCollectedWords] = useState<Word[]>([]);
+  const [currentScreen, setCurrentScreen] = useState<GameScreen>(GameScreen.HOME);
+  const [selectedWords, setSelectedWords] = useState<Word[]>([]);
+  
+  // Settings State
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [language, setLanguage] = useState<Language>(Language.TH);
   const [storyTone, setStoryTone] = useState<StoryTone>(StoryTone.ADVENTURE);
-  const [aiVoice, setAiVoice] = useState<AIVoice>(AIVoice.ZEPHYR);
+  const [aiVoice, setAiVoice] = useState<AIVoice>(AIVoice.AURORA);
   const [isImageGenerationEnabled, setIsImageGenerationEnabled] = useState(true);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  
-  const [preloadedData, setPreloadedData] = useState<PreloadedWord[]>([]);
-  const [fullWordList, setFullWordList] = useState<Word[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [progressText, setProgressText] = useState('');
 
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Audio State
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  
+  // Sound Effects
+  const menuSoundRef = useRef<HTMLAudioElement | null>(null);
 
-  // New speech synthesis system using backend
+  useEffect(() => {
+    // Preload audio element for sound effects
+    // Note: A sound file needs to be placed at /public/sounds/menu-select.wav for this to work.
+    try {
+      menuSoundRef.current = new Audio('/sounds/menu-select.wav');
+      menuSoundRef.current.volume = 0.5;
+    } catch (error) {
+      console.warn("Could not load menu sound effect.", error);
+    }
+  }, []);
+
+  const playMenuSound = () => {
+    menuSoundRef.current?.play().catch(e => console.error("Error playing menu sound:", e));
+  };
+  
   const speak = useCallback(async (text: string) => {
-    if (!text) return;
+    if (isSpeaking || !text) return;
     setIsSpeaking(true);
     try {
-      const response = await fetch('/.netlify/functions/generate-speech', {
+      const response = await fetch(API_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -42,19 +54,26 @@ const App: React.FC = () => {
           payload: { text, voice: aiVoice, language }
         }),
       });
-      if (!response.ok) throw new Error(`Speech generation failed with status: ${response.status}`);
+      if (!response.ok) throw new Error('Failed to generate speech');
       const { audioContent, mimeType } = await response.json();
       
-      const audioSrc = `data:${mimeType};base64,${audioContent}`;
       if (audioRef.current) {
-        audioRef.current.src = audioSrc;
-        audioRef.current.play().catch(e => console.error("Audio playback failed:", e));
+        audioRef.current.pause();
+        audioRef.current.src = '';
       }
+      
+      audioRef.current = new Audio(`data:${mimeType};base64,${audioContent}`);
+      await audioRef.current.play();
+
+      audioRef.current.onended = () => {
+        setIsSpeaking(false);
+      };
+      
     } catch (error) {
-      console.error("Error fetching TTS audio:", error);
+      console.error('Speech generation failed:', error);
       setIsSpeaking(false);
     }
-  }, [aiVoice, language]);
+  }, [aiVoice, language, isSpeaking]);
 
   const stopSpeech = useCallback(() => {
     if (audioRef.current) {
@@ -63,97 +82,33 @@ const App: React.FC = () => {
     }
     setIsSpeaking(false);
   }, []);
-  
-  // Sequential data preloader to avoid rate limiting
-  const preloadDataForVocabTrainer = useCallback(async () => {
-    setIsLoading(true);
-    setProgressText('AI กำลังเลือกคำศัพท์สนุกๆ ให้คุณ!');
-    const categories = Object.values(WordCategory);
-    const randomCategory = categories[Math.floor(Math.random() * categories.length)];
-
-    let words: Word[];
-    try {
-      words = await generateVocabularyList(randomCategory);
-    } catch (e) {
-      console.error("Failed to generate vocab, using fallback", e);
-      words = VOCABULARY[randomCategory];
-    }
-    setFullWordList(words);
-
-    const wordsToPreload = words.slice(0, MAX_WORDS_PER_ROUND);
-    const preloadedItems: PreloadedWord[] = [];
-
-    for (const word of wordsToPreload) {
-      setProgressText(`กำลังสร้างรูปภาพสำหรับ '${language === Language.TH ? word.thai : word.english}'...`);
-      const imageUrl = isImageGenerationEnabled
-        ? await generateVocabImage(word.english)
-        : `https://loremflickr.com/400/300/${word.english},illustration,simple?lock=${word.english.replace(/\s/g, '')}`;
-      preloadedItems.push({ word, imageUrl });
-    }
-    
-    setPreloadedData(preloadedItems);
-    setIsLoading(false);
-    setProgressText('');
-  }, [isImageGenerationEnabled, language]);
-
-
-  useEffect(() => {
-    if (gameState === 'vocab' && preloadedData.length === 0) {
-      preloadDataForVocabTrainer();
-    }
-  }, [gameState, preloadedData.length, preloadDataForVocabTrainer]);
 
   const handleStart = () => {
-    setGameState('vocab');
+    playMenuSound();
+    setCurrentScreen(GameScreen.VOCAB);
   };
-
+  
   const handleVocabComplete = (words: Word[]) => {
-    setCollectedWords(words);
-    setGameState('story');
+    playMenuSound();
+    setSelectedWords(words);
+    setCurrentScreen(GameScreen.STORY);
   };
 
   const handleStoryComplete = () => {
-    setRound(prev => prev + 1);
-    setCollectedWords([]);
-    setPreloadedData([]);
-    setGameState('vocab');
+    playMenuSound();
+    setCurrentScreen(GameScreen.HOME);
+    setSelectedWords([]);
   };
-
-  const handleGoHome = () => {
-    stopSpeech();
-    setGameState('home');
-    setRound(1);
-    setCollectedWords([]);
-    setPreloadedData([]);
-  }
-
-  const renderGameState = () => {
-    if (isLoading && gameState === 'vocab') {
-       return (
-        <div className="w-full h-full flex flex-col items-center justify-center bg-purple-100 text-purple-800 p-8 text-center">
-            <div className="animate-spin rounded-full h-24 w-24 border-t-2 border-b-2 border-purple-500"></div>
-            <h2 className="text-2xl font-bold mt-6">กำลังเตรียมคำศัพท์...</h2>
-            <p className="mt-2 text-md">{progressText}</p>
-        </div>
-       );
-    }
-
-    switch (gameState) {
-      case 'vocab':
-        return <VocabTrainer 
-          onComplete={handleVocabComplete} 
-          round={round} 
-          language={language}
-          initialData={preloadedData}
-          fullWordList={fullWordList}
-          isImageGenerationEnabled={isImageGenerationEnabled}
-          speak={speak}
-          stopSpeech={stopSpeech}
-          isSpeaking={isSpeaking}
-        />;
-      case 'story':
+  
+  const renderScreen = () => {
+    switch (currentScreen) {
+      case GameScreen.HOME:
+        return <HomeScreen onStart={handleStart} />;
+      case GameScreen.VOCAB:
+        return <VocabTrainer onComplete={handleVocabComplete} language={language} />;
+      case GameScreen.STORY:
         return <Storybook 
-          words={collectedWords} 
+          words={selectedWords} 
           onComplete={handleStoryComplete} 
           language={language}
           storyTone={storyTone}
@@ -162,29 +117,24 @@ const App: React.FC = () => {
           stopSpeech={stopSpeech}
           isSpeaking={isSpeaking}
         />;
-      case 'home':
       default:
         return <HomeScreen onStart={handleStart} />;
     }
   };
 
   return (
-    <div id="app-container" className="w-screen h-screen bg-gray-800 font-sans">
-      <audio ref={audioRef} onEnded={() => setIsSpeaking(false)} onError={() => setIsSpeaking(false)} hidden />
-      <main className="w-full h-full">
-        {renderGameState()}
-      </main>
-      <div className="absolute top-4 right-4 z-50 flex gap-2">
-        {gameState !== 'home' && (
-          <button onClick={handleGoHome} className="p-3 bg-white/80 backdrop-blur-sm rounded-full shadow-lg hover:bg-white transition-colors" aria-label="Go home">
-            <HomeIcon />
-          </button>
-        )}
-        <button onClick={() => setIsSettingsOpen(true)} className="p-3 bg-white/80 backdrop-blur-sm rounded-full shadow-lg hover:bg-white transition-colors" aria-label="Settings">
-          <SettingsIcon />
-        </button>
-      </div>
-
+    <div className="w-screen h-screen bg-gray-900 font-sans">
+      {renderScreen()}
+      <button
+        onClick={() => {
+          playMenuSound();
+          setIsSettingsOpen(true);
+        }}
+        className="fixed top-4 right-4 z-40 p-3 bg-white/80 backdrop-blur-sm rounded-full shadow-lg text-purple-700 hover:bg-white hover:scale-110 transition-all"
+        aria-label="Open settings"
+      >
+        <SettingsIcon />
+      </button>
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
@@ -196,6 +146,7 @@ const App: React.FC = () => {
         setAiVoice={setAiVoice}
         isImageGenerationEnabled={isImageGenerationEnabled}
         setIsImageGenerationEnabled={setIsImageGenerationEnabled}
+        playMenuSound={playMenuSound}
       />
     </div>
   );

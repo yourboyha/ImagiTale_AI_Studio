@@ -1,8 +1,3 @@
-// --- DEBUGGING STEP ---
-console.log("--- Loading geminiService.ts (v2 - Server-Side Architecture) ---");
-// This log helps confirm that the browser is loading the correct, refactored version of this file.
-// If you see this in your browser console, the file is up-to-date. If not, it's a caching issue.
-
 import { Word, WordCategory, Language, StoryTone, StoryScene } from '../types';
 
 // This is our new single point of contact with our secure backend.

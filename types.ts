@@ -1,16 +1,21 @@
-
 export enum Language {
-  EN = 'en-US',
-  TH = 'th-TH',
+  TH = 'th',
+  EN = 'en',
+}
+
+export enum GameScreen {
+  HOME = 'home',
+  VOCAB = 'vocab',
+  STORY = 'story',
 }
 
 export enum WordCategory {
-  ANIMALS_NATURE = "animals_nature",
-  FAMILY_PEOPLE = "family_people",
-  FOOD_DRINK = "food_drink",
-  THINGS_TOYS = "things_toys",
-  PLACES_ENVIRONMENT = "places_environment",
-  ACTIONS_EMOTIONS = "actions_emotions",
+  ANIMALS_NATURE = "Animals & Nature",
+  FAMILY_PEOPLE = "Family & People",
+  FOOD_DRINK = "Food & Drink",
+  THINGS_TOYS = "Things & Toys",
+  PLACES_ENVIRONMENT = "Places & Environment",
+  ACTIONS_EMOTIONS = "Actions & Emotions",
 }
 
 export interface Word {
@@ -18,33 +23,25 @@ export interface Word {
   english: string;
 }
 
-export interface PreloadedWord {
-  word: Word;
-  imageUrl: string;
-}
-
 export enum StoryTone {
-  ADVENTURE = "adventure",
-  HEARTWARMING = "heartwarming",
-  FUNNY = "funny",
-  DREAMY = "dreamy",
-  MYSTERY = "mystery",
-  RELATIONSHIPS = "relationships",
-}
-
-export enum AIVoice {
-  ZEPHYR = "Zephyr",
-  PUCK = "Puck",
-  CHARON = "Charon",
-  KORE = "Kore",
-  FENRIR = "Fenrir",
-  LEDA = "Leda",
-  ORUS = "Orus",
-  AOEDE = "Aoede",
+  ADVENTURE = "Adventure",
+  HEARTWARMING = "Heartwarming",
+  FUNNY = "Funny",
+  DREAMY = "Dreamy",
+  MYSTERY = "Mystery",
+  RELATIONSHIPS = "Relationships",
 }
 
 export interface StoryScene {
   text: string;
   imageUrl: string;
   choices: string[];
+}
+
+export enum AIVoice {
+  AURORA = "aurora",
+  JUNIPER = "juniper",
+  LUNA = "luna",
+  ORION = "orion",
+  EMBER = "ember",
 }

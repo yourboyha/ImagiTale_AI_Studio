@@ -1,222 +1,279 @@
-
-import { Handler, HandlerEvent } from "@netlify/functions";
+import type { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 
-// Redefine types to avoid path issues in serverless environment
-enum WordCategory {
-  ANIMALS_NATURE = "animals_nature",
-  FAMILY_PEOPLE = "family_people",
-  FOOD_DRINK = "food_drink",
-  THINGS_TOYS = "things_toys",
-  PLACES_ENVIRONMENT = "places_environment",
-  ACTIONS_EMOTIONS = "actions_emotions",
-}
-
-interface Word {
-  thai: string;
-  english: string;
-}
-
-interface StoryScene {
-  text: string;
-  imageUrl: string;
-  choices: string[];
-}
-
-
-if (!process.env.API_KEY) {
-  throw new Error("API_KEY environment variable is not set.");
-}
-
+// --- INITIALIZE CLIENT ---
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-const JSON_HEADER = { 'Content-Type': 'application/json' };
 
-const vocabListSchema = {
-  type: Type.ARRAY,
-  items: {
-    type: Type.OBJECT,
-    properties: {
-      english: { type: Type.STRING },
-      thai: { type: Type.STRING },
-    },
-    required: ["english", "thai"],
-  },
-};
+// --- WAV CONVERSION HELPERS ---
+// These functions convert the raw audio data from Gemini TTS into a
+// browser-playable WAV file format.
 
-const storySceneSchema = {
-  type: Type.OBJECT,
-  properties: {
-    text: {
-      type: Type.STRING,
-      description: "A paragraph of the story, 2-4 sentences long. It should be simple and engaging for a 3-6 year old child.",
-    },
-    choices: {
-      type: Type.ARRAY,
-      description: "An array of 2 simple, distinct choices for the child to continue the story. For the final scene, this should be an empty array.",
-      items: { type: Type.STRING },
-    },
-  },
-  required: ["text", "choices"],
-};
+interface WavConversionOptions {
+  numChannels: number;
+  sampleRate: number;
+  bitsPerSample: number;
+}
 
-const generateVocabulary = async (category: WordCategory): Promise<Word[]> => {
-  const prompt = `Generate a list of 20 simple, common, one-word nouns for a 3-6 year old child related to the category "${category}". Provide both English and Thai translations for each word. Ensure the words are easily recognizable and appropriate for early learners.`;
+function parseMimeType(mimeType: string): WavConversionOptions {
+  const defaultOptions = { numChannels: 1, sampleRate: 24000, bitsPerSample: 16 };
+  if (!mimeType) return defaultOptions;
   
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: vocabListSchema,
-    },
-  });
+  try {
+    const [fileType, ...params] = mimeType.split(';').map(s => s.trim());
+    const [_, format] = fileType.split('/');
 
-  const jsonText = response.text.trim();
-  return JSON.parse(jsonText) as Word[];
+    const options: Partial<WavConversionOptions> = {};
+
+    if (format && format.toLowerCase().startsWith('l')) {
+        const bits = parseInt(format.slice(1), 10);
+        if (!isNaN(bits)) options.bitsPerSample = bits;
+    }
+
+    for (const param of params) {
+        const [key, value] = param.split('=').map(s => s.trim());
+        if (key === 'rate' && !isNaN(parseInt(value, 10))) {
+            options.sampleRate = parseInt(value, 10);
+        }
+    }
+    return { ...defaultOptions, ...options };
+  } catch(e) {
+    console.error("Error parsing MIME type, using defaults:", e);
+    return defaultOptions;
+  }
+}
+
+function createWavHeader(dataLength: number, options: WavConversionOptions): Buffer {
+  const { numChannels, sampleRate, bitsPerSample } = options;
+  const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+  const blockAlign = numChannels * (bitsPerSample / 8);
+  const buffer = Buffer.alloc(44);
+
+  buffer.write('RIFF', 0);
+  buffer.writeUInt32LE(36 + dataLength, 4);
+  buffer.write('WAVE', 8);
+  buffer.write('fmt ', 12);
+  buffer.writeUInt32LE(16, 16); // PCM
+  buffer.writeUInt16LE(1, 20); // AudioFormat 1 = PCM
+  buffer.writeUInt16LE(numChannels, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(byteRate, 28);
+  buffer.writeUInt16LE(blockAlign, 32);
+  buffer.writeUInt16LE(bitsPerSample, 34);
+  buffer.write('data', 36);
+  buffer.writeUInt32LE(dataLength, 40);
+
+  return buffer;
+}
+
+
+// --- HANDLER FOR GEMINI SPEECH ---
+const handleGenerateGeminiSpeech = async (payload: { text: string; voice: string; language: string }) => {
+    const { text, voice } = payload;
+    
+    // Using the Gemini TTS model as requested
+    const model = 'gemini-2.5-pro-preview-tts';
+    const contents = [{ role: 'user', parts: [{ text }] }];
+    const config = {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+            voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: voice }
+            }
+        },
+    };
+
+    const response = await ai.models.generateContentStream({ model, config, contents });
+
+    let audioBase64 = '';
+    let mimeType = '';
+    for await (const chunk of response) {
+        if (chunk.candidates?.[0]?.content?.parts?.[0]?.inlineData) {
+            const inlineData = chunk.candidates[0].content.parts[0].inlineData;
+            audioBase64 += inlineData.data;
+            if (!mimeType) mimeType = inlineData.mimeType;
+        }
+    }
+
+    if (!audioBase64) throw new Error("Audio generation failed, no data received.");
+    
+    // Convert raw audio to browser-playable WAV format
+    const audioBuffer = Buffer.from(audioBase64, 'base64');
+    const wavOptions = parseMimeType(mimeType);
+    const wavHeader = createWavHeader(audioBuffer.length, wavOptions);
+    const wavBuffer = Buffer.concat([wavHeader, audioBuffer]);
+
+    return { audioContent: wavBuffer.toString('base64'), mimeType: 'audio/wav' };
 };
 
-const generateImage = async (prompt: string, aspectRatio: '1:1' | '16:9'): Promise<string> => {
-  const response = await ai.models.generateImages({
-    model: 'imagen-4.0-generate-001',
-    prompt: prompt,
-    config: {
-      numberOfImages: 1,
-      outputMimeType: 'image/jpeg',
-      aspectRatio: aspectRatio,
-    },
-  });
-
-  const base64ImageBytes = response.generatedImages[0].image.imageBytes;
-  return `data:image/jpeg;base64,${base64ImageBytes}`;
-};
-
-
-const generateFullStoryScene = async (prompt: string, isImageGenerationEnabled: boolean): Promise<StoryScene> => {
-    const textResponse = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+// --- HANDLER FOR VOCABULARY LIST ---
+const handleGenerateVocabulary = async (payload: { category: string }) => {
+    const { category } = payload;
+    const prompt = `Generate a list of 5 simple vocabulary words for a 3-6 year old child related to the category "${category}". For each word, provide both the Thai and English translation.`;
+    
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
-            responseMimeType: "application/json",
-            responseSchema: storySceneSchema,
+            responseMimeType: 'application/json',
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    words: {
+                        type: Type.ARRAY,
+                        description: "An array of 5 vocabulary words.",
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                thai: { type: Type.STRING, description: "The Thai word." },
+                                english: { type: Type.STRING, description: "The English word." },
+                            },
+                            required: ['thai', 'english'],
+                        },
+                    },
+                },
+                required: ['words'],
+            },
+        },
+    });
+
+    const jsonResponse = JSON.parse(response.text);
+    return jsonResponse.words;
+};
+
+// --- HANDLER FOR IMAGE GENERATION ---
+const handleGenerateImage = async (payload: { prompt: string, aspectRatio: string }) => {
+    const { prompt, aspectRatio } = payload;
+    const response = await ai.models.generateImages({
+        model: 'imagen-4.0-generate-001',
+        prompt: prompt,
+        config: {
+            numberOfImages: 1,
+            outputMimeType: 'image/jpeg',
+            aspectRatio: aspectRatio as "1:1" | "16:9" | "9:16" | "4:3" | "3:4",
+        },
+    });
+
+    const base64ImageBytes = response.generatedImages[0].image.imageBytes;
+    const imageUrl = `data:image/jpeg;base64,${base64ImageBytes}`;
+    return { imageUrl };
+};
+
+// --- HANDLER FOR STORY SCENE GENERATION ---
+const handleGenerateFullStoryScene = async (payload: { prompt: string, isImageGenerationEnabled: boolean }) => {
+    const { prompt, isImageGenerationEnabled } = payload;
+    
+    const textResponse = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    text: { type: Type.STRING, description: "The paragraph for this scene of the story. Should be simple and for a young child." },
+                    choices: {
+                        type: Type.ARRAY,
+                        description: "A list of 2 simple, distinct choices for the child to continue the story. This array should be empty for the final scene.",
+                        items: { type: Type.STRING },
+                    },
+                },
+                required: ['text', 'choices'],
+            },
         },
     });
     
-    const jsonText = textResponse.text.trim();
-    const sceneContent = JSON.parse(jsonText) as Omit<StoryScene, 'imageUrl'>;
-    
-    let imageUrl = `https://loremflickr.com/1280/720/children,story,${sceneContent.text.split(" ")[0]}`;
+    const sceneContent = JSON.parse(textResponse.text);
+    const { text, choices } = sceneContent;
 
-    if (isImageGenerationEnabled && sceneContent.text) {
-        const imagePrompt = `A beautiful, vibrant, and simple illustration for a children's storybook. The style should be like a gentle crayon and watercolor drawing with soft colors and clear outlines. The scene is: "${sceneContent.text}"`;
-        imageUrl = await generateImage(imagePrompt, '16:9');
+    let imageUrl = `https://loremflickr.com/1280/720/storybook,illustration,${text.split(' ').slice(0, 3).join(',')}`;
+    if (isImageGenerationEnabled) {
+        const imagePrompt = `A beautiful and simple illustration for a children's storybook, in a whimsical and colorful style, with soft lighting. The scene is: "${text}"`;
+        try {
+            const imageResponse = await ai.models.generateImages({
+                model: 'imagen-4.0-generate-001',
+                prompt: imagePrompt,
+                config: {
+                    numberOfImages: 1,
+                    outputMimeType: 'image/jpeg',
+                    aspectRatio: '16:9',
+                },
+            });
+            const base64ImageBytes = imageResponse.generatedImages[0].image.imageBytes;
+            imageUrl = `data:image/jpeg;base64,${base64ImageBytes}`;
+        } catch (imgError) {
+            console.error("Image generation failed, using fallback:", imgError);
+        }
     }
 
-    return { ...sceneContent, imageUrl };
+    return { text, choices, imageUrl };
 };
 
-const generateTitle = async (prompt: string): Promise<{title: string}> => {
+// --- HANDLER FOR STORY TITLE ---
+const handleGenerateStoryTitle = async (payload: { prompt: string }) => {
+    const { prompt } = payload;
     const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: 'gemini-2.5-flash',
         contents: prompt,
     });
     return { title: response.text.trim().replace(/"/g, '') };
-}
-
-const generateGeminiSpeech = async (text: string, voice: string, language: string) => {
-    const ttsModel = 'gemini-2.5-pro-preview-tts';
-    // A simple heuristic to add breaks for Thai to improve naturalness.
-    const processedText = language === 'th-TH' ? text.replace(/ค่ะ|ครับ/g, '$&<break time="250ms"/>') : text;
-
-    const response = await ai.models.generateContentStream({
-        model: ttsModel,
-        contents: [{ role: 'user', parts: [{ text: processedText }] }],
-        config: {
-            responseModalities: [Modality.AUDIO],
-            speechConfig: {
-                voiceConfig: {
-                    prebuiltVoiceConfig: { voiceName: voice }
-                }
-            }
-        }
-    });
-
-    let audioBase64 = '';
-    let mimeType = 'audio/mpeg'; // Default MIME type
-    for await (const chunk of response) {
-        const part = chunk.candidates?.[0]?.content?.parts?.[0];
-        if (part?.inlineData) {
-            audioBase64 += part.inlineData.data;
-            if (part.inlineData.mimeType) {
-              mimeType = part.inlineData.mimeType;
-            }
-        }
-    }
-    return { audioContent: audioBase64, mimeType };
-}
-
-export const handler: Handler = async (event: HandlerEvent) => {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: JSON.stringify({ message: 'Method Not Allowed' }) };
-  }
-
-  try {
-    const { task, payload } = JSON.parse(event.body || '{}');
-    if (!task || !payload) {
-      return { statusCode: 400, body: JSON.stringify({ message: 'Missing task or payload' }) };
-    }
-
-    let result: any;
-
-    switch (task) {
-      case 'generateVocabularyList':
-        result = await generateVocabulary(payload.category);
-        break;
-      
-      case 'generateImage':
-        const { prompt, aspectRatio } = payload;
-        const imageUrl = await generateImage(prompt, aspectRatio);
-        result = { imageUrl };
-        break;
-
-      case 'generateFullStoryScene':
-        result = await generateFullStoryScene(payload.prompt, payload.isImageGenerationEnabled);
-        break;
-
-      case 'generateStoryTitle':
-        result = await generateTitle(payload.prompt);
-        break;
-      
-      case 'generateGeminiSpeech':
-        result = await generateGeminiSpeech(payload.text, payload.voice, payload.language);
-        break;
-
-      default:
-        return { statusCode: 400, body: JSON.stringify({ message: `Unknown task: ${task}` }) };
-    }
-
-    return {
-      statusCode: 200,
-      headers: JSON_HEADER,
-      body: JSON.stringify(result),
-    };
-
-  } catch (error) {
-    console.error(`Error in Netlify function task "${(JSON.parse(event.body || '{}')).task}":`, error);
-    let errorMessage = "An unknown error occurred.";
-    if (error instanceof Error) {
-        // Attempt to parse nested Gemini API errors for better client-side feedback
-        try {
-            const nestedError = JSON.parse(error.message.replace('_ApiError: ', ''));
-            errorMessage = nestedError?.error?.message || error.message;
-        } catch (e) {
-            errorMessage = error.message;
-        }
-    }
-    return { 
-        statusCode: 500, 
-        headers: JSON_HEADER,
-        body: JSON.stringify({ message: 'Internal Server Error', error: errorMessage }) 
-    };
-  }
 };
+
+// --- MAIN NETLIFY FUNCTION HANDLER ---
+const handler: Handler = async (event: HandlerEvent) => {
+    if (event.httpMethod !== 'POST') {
+        return { statusCode: 405, body: JSON.stringify({ message: 'Method Not Allowed' }) };
+    }
+
+    try {
+        const { task, payload } = JSON.parse(event.body || '{}');
+
+        let result;
+        switch (task) {
+            case 'generateGeminiSpeech':
+                result = await handleGenerateGeminiSpeech(payload);
+                break;
+            case 'generateVocabularyList':
+                result = await handleGenerateVocabulary(payload);
+                break;
+            case 'generateImage':
+                result = await handleGenerateImage(payload);
+                break;
+            case 'generateFullStoryScene':
+                result = await handleGenerateFullStoryScene(payload);
+                break;
+            case 'generateStoryTitle':
+                result = await handleGenerateStoryTitle(payload);
+                break;
+            default:
+                return { statusCode: 400, body: JSON.stringify({ message: `Unknown task: ${task}` }) };
+        }
+        
+        return {
+            statusCode: 200,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(result),
+        };
+
+    } catch (error) {
+        console.error(`Error processing task:`, error);
+        // Attempt to parse Gemini API errors for clearer client-side messages
+        let errorMessage = (error as Error).message;
+        try {
+            const nestedError = JSON.parse(errorMessage);
+            if (nestedError.error && nestedError.error.message) {
+                errorMessage = nestedError.error.message;
+            }
+        } catch (e) { /* Not a JSON error, use original message */ }
+
+        return { 
+            statusCode: 500, 
+            body: JSON.stringify({ 
+                message: "An error occurred on the server.",
+                error: errorMessage
+            }) 
+        };
+    }
+};
+
+export { handler };

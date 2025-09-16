@@ -12,7 +12,8 @@
     "@google/genai": "^1.19.0",
     "react-dom": "^19.1.1",
     "react": "^19.1.1",
-    "@netlify/functions": "^4.2.5"
+    "@netlify/functions": "^4.2.5",
+    "@google-cloud/text-to-speech": "^6.3.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
