@@ -1,73 +1,82 @@
-// netlify/functions/generate-speech.ts
+import { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";
 
-// --- DEBUGGING VERSION ---
-// This version will help us confirm if the API Key is being loaded.
+// Interface for the incoming request body
+interface SpeechRequestBody {
+  textToSpeak: string;
+  language: string; // e.g., 'th-TH', 'en-US'
+}
 
-export const handler = async (event) => {
-  // --- DEBUGGING STEP ---
-  // We will log to the Netlify console to see if the API key is loaded.
-  const API_KEY = process.env.API_KEY;
-  console.log(`Function triggered. Attempting to use API Key. Is it loaded? ${API_KEY ? `Yes, starts with: ${API_KEY.substring(0, 4)}...` : 'No, it is UNDEFINED!'}`);
-  // --- END DEBUGGING STEP ---
+// Google Cloud Text-to-Speech API endpoint
+const TTS_API_URL = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${process.env.API_KEY}`;
 
-  // If the API Key is not found, return a specific error.
-  if (!API_KEY) {
-    console.error("CRITICAL: API_KEY environment variable is not set or not accessible in Netlify Functions.");
+const handler: Handler = async (event: HandlerEvent, context: HandlerContext) => {
+  if (event.httpMethod !== 'POST') {
     return {
-      statusCode: 500,
-      body: JSON.stringify({ error: 'Server configuration error: API key not found.' }),
+      statusCode: 405,
+      body: JSON.stringify({ message: 'Method Not Allowed' }),
     };
   }
-
-  const { textToSpeak, language } = JSON.parse(event.body);
-
-  if (!textToSpeak) {
-    return {
-      statusCode: 400,
-      body: JSON.stringify({ error: 'Missing textToSpeak parameter' }),
-    };
-  }
-
-  const voiceConfig = language === 'th-TH'
-    ? { languageCode: 'th-TH', name: 'th-TH-Standard-A' }
-    : { languageCode: 'en-US', name: 'en-US-Studio-O' };
 
   try {
-    const ttsApiUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${API_KEY}`;
+    const { textToSpeak, language } = JSON.parse(event.body || '{}') as SpeechRequestBody;
 
-    const response = await fetch(ttsApiUrl, {
+    if (!textToSpeak || !language) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ message: 'Missing textToSpeak or language in request body' }),
+      };
+    }
+
+    // Determine voice settings based on language
+    // These are standard, high-quality WaveNet voices from Google Cloud TTS.
+    const voiceConfig = language.startsWith('th')
+      ? { languageCode: 'th-TH', name: 'th-TH-Wavenet-A', ssmlGender: 'FEMALE' }
+      : { languageCode: 'en-US', name: 'en-US-Wavenet-D', ssmlGender: 'MALE' };
+
+    const requestBody = {
+      input: {
+        text: textToSpeak,
+      },
+      voice: voiceConfig,
+      audioConfig: {
+        audioEncoding: 'MP3', // MP3 is widely supported
+      },
+    };
+
+    const ttsResponse = await fetch(TTS_API_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        input: { text: textToSpeak },
-        voice: voiceConfig,
-        audioConfig: { audioEncoding: 'MP3' },
-      }),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
     });
 
-    if (!response.ok) {
-      const errorBody = await response.json();
+    if (!ttsResponse.ok) {
+      const errorBody = await ttsResponse.text();
       console.error('Google TTS API Error:', errorBody);
-      throw new Error(`Google TTS API responded with status: ${response.status}`);
+      throw new Error(`Google TTS API failed with status: ${ttsResponse.status}`);
     }
 
-    const data = await response.json();
-    
-    if (!data.audioContent) {
-        throw new Error("Audio generation failed, no audioContent in response from Google TTS API.");
-    }
+    const responseData = await ttsResponse.json();
+    const audioContent = responseData.audioContent; // This is a base64 encoded string
 
     return {
       statusCode: 200,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ audioContent: data.audioContent, mimeType: 'audio/mpeg' }),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        audioContent: audioContent,
+        mimeType: 'audio/mpeg', // Corresponds to MP3 encoding
+      }),
     };
-
   } catch (error) {
     console.error('Error in generate-speech function:', error);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: 'Failed to generate speech' }),
+      body: JSON.stringify({ message: 'Internal Server Error', error: error.message }),
     };
   }
 };
+
+export { handler };
