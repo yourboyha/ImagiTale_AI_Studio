@@ -300,7 +300,7 @@ const Storybook: React.FC<StorybookProps> = ({ words, onComplete, language, stor
           {isLoading && !currentScene?.imageUrl ? (
              <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-purple-500"></div>
           ) : (
-            <img src={currentScene.imageUrl} alt="Story scene" className="w-full h-full object-cover"/>
+            currentScene && <img src={currentScene.imageUrl} alt="Story scene" className="w-full h-full object-cover"/>
           )}
         </div>
         
@@ -337,7 +337,7 @@ const Storybook: React.FC<StorybookProps> = ({ words, onComplete, language, stor
                   </div>
               ) : (
                 <div className="flex flex-col items-center gap-3">
-                  {currentScene?.choices && (
+                  {currentScene?.choices && currentScene.choices.length > 0 && (
                     <div className="w-full flex flex-col items-center gap-3">
                       {currentScene.choices.map((choice, index) => (
                         <button
@@ -352,7 +352,7 @@ const Storybook: React.FC<StorybookProps> = ({ words, onComplete, language, stor
                     </div>
                   )}
 
-                  {currentScene?.choices && recognitionRef.current && (
+                  {currentScene?.choices && currentScene.choices.length > 0 && recognitionRef.current && (
                       <div className="w-full flex flex-col items-center gap-1 mt-3">
                           <button onClick={isListening ? stopListening : startListening} disabled={areButtonsDisabled || isSpeaking} className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 ${isListening ? 'bg-red-500 animate-pulse scale-110' : 'bg-blue-500 hover:bg-blue-600'} text-white shadow-lg disabled:bg-gray-400`}>
                               <div className="w-8 h-8">
@@ -365,7 +365,7 @@ const Storybook: React.FC<StorybookProps> = ({ words, onComplete, language, stor
                       </div>
                   )}
                   
-                  {scenes.length >= 5 && !currentScene?.choices && (
+                  {scenes.length >= 5 && (!currentScene?.choices || currentScene.choices.length === 0) && (
                     <div className="w-full flex flex-col sm:flex-row items-center justify-center gap-4 mt-2">
                       <button onClick={onComplete} disabled={areButtonsDisabled || isListening} className="w-full sm:w-auto px-8 py-4 text-white font-bold text-xl rounded-xl shadow-lg transform hover:scale-105 transition-all duration-300 ease-in-out bg-gradient-to-br from-green-500 to-teal-500 hover:from-green-600 hover:to-teal-600 border-b-4 border-green-700 active:border-b-2 disabled:opacity-50">
                         เล่นอีกครั้ง!
