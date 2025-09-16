@@ -1,6 +1,6 @@
 
 import { Handler, HandlerEvent } from "@netlify/functions";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, Modality } from "@google/genai";
 
 // Redefine types to avoid path issues in serverless environment
 enum WordCategory {
@@ -93,7 +93,6 @@ const generateImage = async (prompt: string, aspectRatio: '1:1' | '16:9'): Promi
 
 
 const generateFullStoryScene = async (prompt: string, isImageGenerationEnabled: boolean): Promise<StoryScene> => {
-    // 1. Generate story text and choices
     const textResponse = await ai.models.generateContent({
         model: "gemini-2.5-flash",
         contents: prompt,
@@ -108,7 +107,6 @@ const generateFullStoryScene = async (prompt: string, isImageGenerationEnabled: 
     
     let imageUrl = `https://loremflickr.com/1280/720/children,story,${sceneContent.text.split(" ")[0]}`;
 
-    // 2. Generate image if enabled
     if (isImageGenerationEnabled && sceneContent.text) {
         const imagePrompt = `A beautiful, vibrant, and simple illustration for a children's storybook. The style should be like a gentle crayon and watercolor drawing with soft colors and clear outlines. The scene is: "${sceneContent.text}"`;
         imageUrl = await generateImage(imagePrompt, '16:9');
@@ -122,7 +120,39 @@ const generateTitle = async (prompt: string): Promise<{title: string}> => {
         model: "gemini-2.5-flash",
         contents: prompt,
     });
-    return { title: response.text.trim().replace(/"/g, '') }; // Remove quotes from title
+    return { title: response.text.trim().replace(/"/g, '') };
+}
+
+const generateGeminiSpeech = async (text: string, voice: string, language: string) => {
+    const ttsModel = 'gemini-2.5-pro-preview-tts';
+    // A simple heuristic to add breaks for Thai to improve naturalness.
+    const processedText = language === 'th-TH' ? text.replace(/ค่ะ|ครับ/g, '$&<break time="250ms"/>') : text;
+
+    const response = await ai.models.generateContentStream({
+        model: ttsModel,
+        contents: [{ role: 'user', parts: [{ text: processedText }] }],
+        config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: {
+                voiceConfig: {
+                    prebuiltVoiceConfig: { voiceName: voice }
+                }
+            }
+        }
+    });
+
+    let audioBase64 = '';
+    let mimeType = 'audio/mpeg'; // Default MIME type
+    for await (const chunk of response) {
+        const part = chunk.candidates?.[0]?.content?.parts?.[0];
+        if (part?.inlineData) {
+            audioBase64 += part.inlineData.data;
+            if (part.inlineData.mimeType) {
+              mimeType = part.inlineData.mimeType;
+            }
+        }
+    }
+    return { audioContent: audioBase64, mimeType };
 }
 
 export const handler: Handler = async (event: HandlerEvent) => {
@@ -156,6 +186,10 @@ export const handler: Handler = async (event: HandlerEvent) => {
       case 'generateStoryTitle':
         result = await generateTitle(payload.prompt);
         break;
+      
+      case 'generateGeminiSpeech':
+        result = await generateGeminiSpeech(payload.text, payload.voice, payload.language);
+        break;
 
       default:
         return { statusCode: 400, body: JSON.stringify({ message: `Unknown task: ${task}` }) };
@@ -168,8 +202,17 @@ export const handler: Handler = async (event: HandlerEvent) => {
     };
 
   } catch (error) {
-    console.error('Error in Netlify function:', error);
-    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+    console.error(`Error in Netlify function task "${(JSON.parse(event.body || '{}')).task}":`, error);
+    let errorMessage = "An unknown error occurred.";
+    if (error instanceof Error) {
+        // Attempt to parse nested Gemini API errors for better client-side feedback
+        try {
+            const nestedError = JSON.parse(error.message.replace('_ApiError: ', ''));
+            errorMessage = nestedError?.error?.message || error.message;
+        } catch (e) {
+            errorMessage = error.message;
+        }
+    }
     return { 
         statusCode: 500, 
         headers: JSON_HEADER,

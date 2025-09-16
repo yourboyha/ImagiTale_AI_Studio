@@ -32,6 +32,17 @@ export enum StoryTone {
   RELATIONSHIPS = "relationships",
 }
 
+export enum AIVoice {
+  ZEPHYR = "Zephyr",
+  PUCK = "Puck",
+  CHARON = "Charon",
+  KORE = "Kore",
+  FENRIR = "Fenrir",
+  LEDA = "Leda",
+  ORUS = "Orus",
+  AOEDE = "Aoede",
+}
+
 export interface StoryScene {
   text: string;
   imageUrl: string;

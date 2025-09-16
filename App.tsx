@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import HomeScreen from './components/HomeScreen';
 import VocabTrainer from './components/VocabTrainer';
@@ -6,7 +5,7 @@ import Storybook from './components/Storybook';
 import SettingsModal from './components/SettingsModal';
 import SettingsIcon from './components/icons/SettingsIcon';
 import HomeIcon from './components/icons/HomeIcon';
-import { Language, StoryTone, Word, WordCategory, PreloadedWord } from './types';
+import { Language, StoryTone, Word, WordCategory, PreloadedWord, AIVoice } from './types';
 import { VOCABULARY, MAX_WORDS_PER_ROUND } from './constants';
 import { generateVocabularyList, generateVocabImage } from './services/geminiService';
 
@@ -18,38 +17,57 @@ const App: React.FC = () => {
   const [collectedWords, setCollectedWords] = useState<Word[]>([]);
   const [language, setLanguage] = useState<Language>(Language.TH);
   const [storyTone, setStoryTone] = useState<StoryTone>(StoryTone.ADVENTURE);
+  const [aiVoice, setAiVoice] = useState<AIVoice>(AIVoice.ZEPHYR);
   const [isImageGenerationEnabled, setIsImageGenerationEnabled] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
   
   const [preloadedData, setPreloadedData] = useState<PreloadedWord[]>([]);
   const [fullWordList, setFullWordList] = useState<Word[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [progressText, setProgressText] = useState('');
 
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isSpeaking, setIsSpeaking] = useState(false);
 
-  const speak = useCallback((text: string) => {
-    if (typeof window === 'undefined' || !window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = language;
-    utterance.rate = 0.9;
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
-    utteranceRef.current = utterance;
-    window.speechSynthesis.speak(utterance);
-  }, [language]);
-  
-  const stopSpeech = useCallback(() => {
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
+  // New speech synthesis system using backend
+  const speak = useCallback(async (text: string) => {
+    if (!text) return;
+    setIsSpeaking(true);
+    try {
+      const response = await fetch('/.netlify/functions/generate-speech', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          task: 'generateGeminiSpeech',
+          payload: { text, voice: aiVoice, language }
+        }),
+      });
+      if (!response.ok) throw new Error(`Speech generation failed with status: ${response.status}`);
+      const { audioContent, mimeType } = await response.json();
+      
+      const audioSrc = `data:${mimeType};base64,${audioContent}`;
+      if (audioRef.current) {
+        audioRef.current.src = audioSrc;
+        audioRef.current.play().catch(e => console.error("Audio playback failed:", e));
+      }
+    } catch (error) {
+      console.error("Error fetching TTS audio:", error);
       setIsSpeaking(false);
     }
-  }, []);
+  }, [aiVoice, language]);
 
+  const stopSpeech = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    setIsSpeaking(false);
+  }, []);
+  
+  // Sequential data preloader to avoid rate limiting
   const preloadDataForVocabTrainer = useCallback(async () => {
     setIsLoading(true);
+    setProgressText('AI กำลังเลือกคำศัพท์สนุกๆ ให้คุณ!');
     const categories = Object.values(WordCategory);
     const randomCategory = categories[Math.floor(Math.random() * categories.length)];
 
@@ -63,26 +81,27 @@ const App: React.FC = () => {
     setFullWordList(words);
 
     const wordsToPreload = words.slice(0, MAX_WORDS_PER_ROUND);
+    const preloadedItems: PreloadedWord[] = [];
 
-    const preloaded = await Promise.all(
-        wordsToPreload.map(async (word) => {
-            const imageUrl = isImageGenerationEnabled
-                ? await generateVocabImage(word.english)
-                : `https://loremflickr.com/400/300/${word.english},illustration,simple?lock=${word.english.replace(/\s/g, '')}`;
-            return { word, imageUrl };
-        })
-    );
+    for (const word of wordsToPreload) {
+      setProgressText(`กำลังสร้างรูปภาพสำหรับ '${language === Language.TH ? word.thai : word.english}'...`);
+      const imageUrl = isImageGenerationEnabled
+        ? await generateVocabImage(word.english)
+        : `https://loremflickr.com/400/300/${word.english},illustration,simple?lock=${word.english.replace(/\s/g, '')}`;
+      preloadedItems.push({ word, imageUrl });
+    }
     
-    setPreloadedData(preloaded);
+    setPreloadedData(preloadedItems);
     setIsLoading(false);
-  }, [isImageGenerationEnabled]);
+    setProgressText('');
+  }, [isImageGenerationEnabled, language]);
 
 
   useEffect(() => {
     if (gameState === 'vocab' && preloadedData.length === 0) {
       preloadDataForVocabTrainer();
     }
-  }, [gameState, preloadData.length, preloadDataForVocabTrainer]);
+  }, [gameState, preloadedData.length, preloadDataForVocabTrainer]);
 
   const handleStart = () => {
     setGameState('vocab');
@@ -96,7 +115,7 @@ const App: React.FC = () => {
   const handleStoryComplete = () => {
     setRound(prev => prev + 1);
     setCollectedWords([]);
-    setPreloadedData([]); // Clear preloaded data to trigger refetch for next round
+    setPreloadedData([]);
     setGameState('vocab');
   };
 
@@ -111,10 +130,10 @@ const App: React.FC = () => {
   const renderGameState = () => {
     if (isLoading && gameState === 'vocab') {
        return (
-        <div className="w-full h-full flex flex-col items-center justify-center bg-purple-100 text-purple-800 p-8">
+        <div className="w-full h-full flex flex-col items-center justify-center bg-purple-100 text-purple-800 p-8 text-center">
             <div className="animate-spin rounded-full h-24 w-24 border-t-2 border-b-2 border-purple-500"></div>
             <h2 className="text-2xl font-bold mt-6">กำลังเตรียมคำศัพท์...</h2>
-            <p className="mt-2 text-md">AI กำลังเลือกคำศัพท์สนุกๆ ให้คุณ!</p>
+            <p className="mt-2 text-md">{progressText}</p>
         </div>
        );
     }
@@ -151,6 +170,7 @@ const App: React.FC = () => {
 
   return (
     <div id="app-container" className="w-screen h-screen bg-gray-800 font-sans">
+      <audio ref={audioRef} onEnded={() => setIsSpeaking(false)} onError={() => setIsSpeaking(false)} hidden />
       <main className="w-full h-full">
         {renderGameState()}
       </main>
@@ -172,6 +192,8 @@ const App: React.FC = () => {
         setLanguage={setLanguage}
         storyTone={storyTone}
         setStoryTone={setStoryTone}
+        aiVoice={aiVoice}
+        setAiVoice={setAiVoice}
         isImageGenerationEnabled={isImageGenerationEnabled}
         setIsImageGenerationEnabled={setIsImageGenerationEnabled}
       />

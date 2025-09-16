@@ -1,6 +1,6 @@
 
 import React, { Fragment } from 'react';
-import { Language, StoryTone } from '../types';
+import { Language, StoryTone, AIVoice } from '../types';
 import { STORY_TONE_THAI } from '../constants';
 import CloseIcon from './icons/CloseIcon';
 import AdventureIcon from './icons/AdventureIcon';
@@ -17,6 +17,8 @@ interface SettingsModalProps {
   setLanguage: (lang: Language) => void;
   storyTone: StoryTone;
   setStoryTone: (tone: StoryTone) => void;
+  aiVoice: AIVoice;
+  setAiVoice: (voice: AIVoice) => void;
   isImageGenerationEnabled: boolean;
   setIsImageGenerationEnabled: (enabled: boolean) => void;
 }
@@ -37,6 +39,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   setLanguage,
   storyTone,
   setStoryTone,
+  aiVoice,
+  setAiVoice,
   isImageGenerationEnabled,
   setIsImageGenerationEnabled,
 }) => {
@@ -79,6 +83,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 </button>
               ))}
             </div>
+          </fieldset>
+
+          {/* AI Voice Selection */}
+          <fieldset>
+             <legend className="text-lg font-semibold text-gray-700 mb-2">เสียง AI</legend>
+             <select
+                value={aiVoice}
+                onChange={(e) => setAiVoice(e.target.value as AIVoice)}
+                className="w-full p-3 bg-gray-100 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+             >
+                {(Object.keys(AIVoice) as Array<keyof typeof AIVoice>).map(key => (
+                    <option key={key} value={AIVoice[key]}>{AIVoice[key]}</option>
+                ))}
+             </select>
           </fieldset>
 
           {/* Story Tone Selection */}
