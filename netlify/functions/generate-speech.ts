@@ -1,84 +1,68 @@
 // netlify/functions/generate-speech.ts
 
-// นี่คือโค้ดฝั่ง Server ที่จะเรียก Gemini API จริงๆ
-// สังเกตว่าเรา import @google/genai ได้ตามปกติเพราะนี่คือสภาพแวดล้อม Node.js
-
-import { GoogleGenAI, Modality } from "@google/genai";
+// นี่คือโค้ดเวอร์ชันแก้ไข ที่เรียกใช้ Google Cloud Text-to-Speech API โดยตรง
+// ซึ่งเป็นวิธีที่ถูกต้องและเสถียรที่สุด
 
 // Handler ของ Netlify Function
-// มันจะถูกเรียกทุกครั้งที่มี request มาที่ /.netlify/functions/generate-speech
 export const handler = async (event) => {
-  // รับข้อความที่ต้องการแปลงเป็นเสียงจาก request body
-  const { textToSpeak } = JSON.parse(event.body);
+  const { textToSpeak, language } = JSON.parse(event.body);
 
   if (!textToSpeak) {
     return {
       statusCode: 400,
-      body: JSON.stringify({ error: "Missing textToSpeak parameter" }),
+      body: JSON.stringify({ error: 'Missing textToSpeak parameter' }),
     };
   }
 
+  // กำหนดค่าเสียงตามภาษาที่ส่งมาจาก Client
+  const voiceConfig = language === 'th-TH'
+    ? { languageCode: 'th-TH', name: 'th-TH-Standard-A' } // เสียงผู้หญิงไทยที่เป็นธรรมชาติ
+    : { languageCode: 'en-US', name: 'en-US-Studio-O' }; // เสียงผู้หญิงคุณภาพสตูดิโอ (เสียงนุ่มนวล)
+
   try {
-    // ใช้ API KEY จาก Environment Variable ที่ตั้งค่าไว้ใน Netlify
-    // นี่เป็นวิธีที่ปลอดภัยที่สุด ห้ามใส่ Key ไว้ในโค้ดเด็ดขาด!
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+    const API_KEY = process.env.API_KEY;
+    const ttsApiUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${API_KEY}`;
 
-    const config = {
-      responseModalities: [Modality.AUDIO], // ขอผลลัพธ์เป็นเสียง
-      speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: {
-            // เราสามารถเปลี่ยนเสียงตรงนี้ได้ หรือจะส่งชื่อเสียงมาจาก Client ก็ได้
-            voiceName: "Charon",
-          },
+    const response = await fetch(ttsApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        input: {
+          text: textToSpeak,
         },
-      },
-    };
-
-    // ใช้โมเดลที่รองรับ Text-to-Speech (TTS)
-    // หมายเหตุ: ชื่อโมเดลอาจมีการเปลี่ยนแปลงในอนาคต
-    const model = "gemini-2.5-pro-preview-tts";
-
-    const contents = [
-      {
-        role: "user",
-        parts: [{ text: textToSpeak }],
-      },
-    ];
-
-    // เรียก API แบบ Stream เพื่อรับข้อมูลเสียง
-    const response = await ai.models.generateContentStream({
-      model,
-      config,
-      contents,
+        voice: voiceConfig,
+        audioConfig: {
+          audioEncoding: 'MP3', // ใช้ MP3 เพื่อคุณภาพที่ดีและขนาดไฟล์ที่เล็ก
+        },
+      }),
     });
 
-    let audioBase64 = "";
-    // วนลูปเพื่อรวบรวมข้อมูลเสียงที่ถูกส่งมาเป็นชิ้นๆ (chunks)
-    for await (const chunk of response) {
-      if (chunk.candidates?.[0]?.content?.parts?.[0]?.inlineData) {
-        audioBase64 += chunk.candidates[0].content.parts[0].inlineData.data;
-      }
+    if (!response.ok) {
+      const errorBody = await response.json();
+      console.error('Google TTS API Error:', errorBody);
+      throw new Error(`Google TTS API responded with status: ${response.status}`);
     }
 
-    if (!audioBase64) {
-      throw new Error("Audio generation failed, no data received.");
+    const data = await response.json();
+    
+    if (!data.audioContent) {
+        throw new Error("Audio generation failed, no audioContent in response from Google TTS API.");
     }
 
     // ส่งข้อมูลเสียงที่เข้ารหัสเป็น Base64 กลับไปให้ Client
     return {
       statusCode: 200,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        audioContent: audioBase64,
-        mimeType: "audio/wav",
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ audioContent: data.audioContent, mimeType: 'audio/mpeg' }), // mimeType สำหรับ MP3
     };
+
   } catch (error) {
-    console.error("Error generating speech:", error);
+    console.error('Error in generate-speech function:', error);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: "Failed to generate speech" }),
+      body: JSON.stringify({ error: 'Failed to generate speech' }),
     };
   }
 };

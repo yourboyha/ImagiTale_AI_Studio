@@ -259,7 +259,7 @@ const App: React.FC = () => {
       const response = await fetch('/.netlify/functions/generate-speech', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ textToSpeak: text }),
+        body: JSON.stringify({ textToSpeak: text, language: language }), // Send current language
       });
       
       if (!response.ok) {
@@ -276,7 +276,7 @@ const App: React.FC = () => {
     } finally {
       setIsAudioLoading(false);
     }
-  }, [isAudioLoading]);
+  }, [isAudioLoading, language]);
 
   const stopSpeech = useCallback(() => {
     setAudioSrc(null);
