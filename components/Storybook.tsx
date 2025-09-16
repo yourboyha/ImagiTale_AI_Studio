@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Word, StoryScene, Language, StoryTone } from '../types';
 import { generateInitialStoryScene, generateNextStoryScene, generateFinalStoryScene, generateStoryTitle } from '../services/geminiService';
@@ -74,7 +75,6 @@ const Storybook: React.FC<StorybookProps> = ({ words, onComplete, language, stor
     if (scenes.length === 0) {
       newScene = await generateInitialStoryScene(wordStrings, language, storyTone, isImageGenerationEnabled);
     } else if (scenes.length < 4) {
-      // FIX: Removed extra `scenes.length` argument. The function expects 6 arguments but was receiving 7.
       newScene = await generateNextStoryScene(storySoFar, choice || '', language, storyTone, wordStrings, isImageGenerationEnabled);
     } else {
       newScene = await generateFinalStoryScene(storySoFar, language, storyTone, wordStrings, isImageGenerationEnabled);

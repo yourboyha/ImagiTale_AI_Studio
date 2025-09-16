@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { StoryTone } from '../types';
 import { STORY_TONE_THAI } from '../constants';
@@ -364,7 +365,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onStart }) => {
 
   useEffect(() => {
     const tones = Object.values(StoryTone);
-    const randomTone = tones[Math.floor(Math.random() * tones.length)];
+    // FIX: Cast randomTone to StoryTone to satisfy the index type of toneBackgroundMap.
+    const randomTone = tones[Math.floor(Math.random() * tones.length)] as StoryTone;
     const availableBgs = toneBackgroundMap[randomTone] || toneBackgroundMap[StoryTone.ADVENTURE];
     const RandomBg = availableBgs[Math.floor(Math.random() * availableBgs.length)];
     setTheme({ tone: randomTone, BackgroundComponent: RandomBg });

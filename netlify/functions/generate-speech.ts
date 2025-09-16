@@ -1,158 +1,179 @@
 
-import type { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";
+import { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Initialize the Google Gemini API client
-// The API key is securely stored as an environment variable on Netlify
+// Redefine types to avoid path issues in serverless environment
+enum WordCategory {
+  ANIMALS_NATURE = "animals_nature",
+  FAMILY_PEOPLE = "family_people",
+  FOOD_DRINK = "food_drink",
+  THINGS_TOYS = "things_toys",
+  PLACES_ENVIRONMENT = "places_environment",
+  ACTIONS_EMOTIONS = "actions_emotions",
+}
+
+interface Word {
+  thai: string;
+  english: string;
+}
+
+interface StoryScene {
+  text: string;
+  imageUrl: string;
+  choices: string[];
+}
+
+
 if (!process.env.API_KEY) {
   throw new Error("API_KEY environment variable is not set.");
 }
+
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// --- Helper function to create a JSON response ---
-const jsonResponse = (statusCode: number, body: any) => {
-  return {
-    statusCode,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  };
+const JSON_HEADER = { 'Content-Type': 'application/json' };
+
+const vocabListSchema = {
+  type: Type.ARRAY,
+  items: {
+    type: Type.OBJECT,
+    properties: {
+      english: { type: Type.STRING },
+      thai: { type: Type.STRING },
+    },
+    required: ["english", "thai"],
+  },
 };
 
-// --- Task: Generate Vocabulary List ---
-const generateVocabularyList = async (payload: any) => {
-  const { category } = payload;
-  const prompt = `Generate a list of 10 simple, common, and distinct vocabulary words for a 3-6 year old child related to the category "${category}". Provide the words in both Thai and English. Respond with ONLY a single JSON array of objects. Each object should have two keys: "thai" and "english". Do not include any other text, explanations, or markdown formatting.`;
+const storySceneSchema = {
+  type: Type.OBJECT,
+  properties: {
+    text: {
+      type: Type.STRING,
+      description: "A paragraph of the story, 2-4 sentences long. It should be simple and engaging for a 3-6 year old child.",
+    },
+    choices: {
+      type: Type.ARRAY,
+      description: "An array of 2 simple, distinct choices for the child to continue the story. For the final scene, this should be an empty array.",
+      items: { type: Type.STRING },
+    },
+  },
+  required: ["text", "choices"],
+};
+
+const generateVocabulary = async (category: WordCategory): Promise<Word[]> => {
+  const prompt = `Generate a list of 20 simple, common, one-word nouns for a 3-6 year old child related to the category "${category}". Provide both English and Thai translations for each word. Ensure the words are easily recognizable and appropriate for early learners.`;
   
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
+    model: "gemini-2.5-flash",
     contents: prompt,
     config: {
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            thai: { type: Type.STRING },
-            english: { type: Type.STRING },
-          },
-          required: ["thai", "english"],
-        },
-      },
+      responseMimeType: "application/json",
+      responseSchema: vocabListSchema,
     },
   });
 
-  const vocabList = JSON.parse(response.text);
-  return jsonResponse(200, vocabList);
+  const jsonText = response.text.trim();
+  return JSON.parse(jsonText) as Word[];
 };
 
-// --- Task: Generate Image (for Vocab and Story) ---
-const generateImage = async (payload: any) => {
-  const { prompt, aspectRatio = '1:1' } = payload;
-  
+const generateImage = async (prompt: string, aspectRatio: '1:1' | '16:9'): Promise<string> => {
   const response = await ai.models.generateImages({
     model: 'imagen-4.0-generate-001',
-    prompt,
+    prompt: prompt,
     config: {
       numberOfImages: 1,
       outputMimeType: 'image/jpeg',
-      aspectRatio,
+      aspectRatio: aspectRatio,
     },
   });
 
   const base64ImageBytes = response.generatedImages[0].image.imageBytes;
-  const imageUrl = `data:image/jpeg;base64,${base64ImageBytes}`;
-  return jsonResponse(200, { imageUrl });
+  return `data:image/jpeg;base64,${base64ImageBytes}`;
 };
 
-// --- Task: Generate Full Story Scene (Text + Image) ---
-const generateFullStoryScene = async (payload: any) => {
-  const { prompt, isImageGenerationEnabled } = payload;
 
-  // 1. Generate story text and choices
-  const textResponse = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: prompt,
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          text: { type: Type.STRING, description: "One or two paragraphs of the story scene, written in simple language for a child." },
-          choices: {
-            type: Type.ARRAY,
-            description: "An array of 2 simple choices for the user. Should be an empty array for the final scene.",
-            items: { type: Type.STRING }
-          },
-        },
-        required: ["text", "choices"],
-      },
-    },
-  });
-
-  const storyData = JSON.parse(textResponse.text);
-  let imageUrl: string;
-
-  // 2. Generate image for the scene (if enabled)
-  if (isImageGenerationEnabled) {
-    const imagePrompt = `A cute and whimsical, colorful children's storybook illustration. Minimalist style with soft, friendly characters and a simple background. The scene depicts: "${storyData.text}".`;
-    const imageGenResponse = await ai.models.generateImages({
-        model: 'imagen-4.0-generate-001',
-        prompt: imagePrompt,
+const generateFullStoryScene = async (prompt: string, isImageGenerationEnabled: boolean): Promise<StoryScene> => {
+    // 1. Generate story text and choices
+    const textResponse = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
         config: {
-            numberOfImages: 1,
-            outputMimeType: 'image/jpeg',
-            aspectRatio: '16:9',
+            responseMimeType: "application/json",
+            responseSchema: storySceneSchema,
         },
     });
-    const base64ImageBytes = imageGenResponse.generatedImages[0].image.imageBytes;
-    imageUrl = `data:image/jpeg;base64,${base64ImageBytes}`;
-  } else {
-    // Fallback placeholder image
-    imageUrl = `https://loremflickr.com/1280/720/kids,story,illustration,${storyData.text.split(' ')[0] || 'scene'}`;
-  }
+    
+    const jsonText = textResponse.text.trim();
+    const sceneContent = JSON.parse(jsonText) as Omit<StoryScene, 'imageUrl'>;
+    
+    let imageUrl = `https://loremflickr.com/1280/720/children,story,${sceneContent.text.split(" ")[0]}`;
 
-  const finalScene = { ...storyData, imageUrl };
-  return jsonResponse(200, finalScene);
+    // 2. Generate image if enabled
+    if (isImageGenerationEnabled && sceneContent.text) {
+        const imagePrompt = `A beautiful, vibrant, and simple illustration for a children's storybook. The style should be like a gentle crayon and watercolor drawing with soft colors and clear outlines. The scene is: "${sceneContent.text}"`;
+        imageUrl = await generateImage(imagePrompt, '16:9');
+    }
+
+    return { ...sceneContent, imageUrl };
 };
 
-// --- Task: Generate Story Title ---
-const generateStoryTitle = async (payload: any) => {
-    const { prompt } = payload;
+const generateTitle = async (prompt: string): Promise<{title: string}> => {
     const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: "gemini-2.5-flash",
         contents: prompt,
     });
-    return jsonResponse(200, { title: response.text.trim().replace(/"/g, '') });
-};
+    return { title: response.text.trim().replace(/"/g, '') }; // Remove quotes from title
+}
 
-
-// --- Main Netlify Function Handler ---
-const handler: Handler = async (event: HandlerEvent, context: HandlerContext) => {
+export const handler: Handler = async (event: HandlerEvent) => {
   if (event.httpMethod !== 'POST') {
-    return jsonResponse(405, { message: 'Method Not Allowed' });
+    return { statusCode: 405, body: JSON.stringify({ message: 'Method Not Allowed' }) };
   }
 
   try {
     const { task, payload } = JSON.parse(event.body || '{}');
+    if (!task || !payload) {
+      return { statusCode: 400, body: JSON.stringify({ message: 'Missing task or payload' }) };
+    }
+
+    let result: any;
 
     switch (task) {
       case 'generateVocabularyList':
-        return await generateVocabularyList(payload);
+        result = await generateVocabulary(payload.category);
+        break;
+      
       case 'generateImage':
-        return await generateImage(payload);
+        const { prompt, aspectRatio } = payload;
+        const imageUrl = await generateImage(prompt, aspectRatio);
+        result = { imageUrl };
+        break;
+
       case 'generateFullStoryScene':
-        return await generateFullStoryScene(payload);
+        result = await generateFullStoryScene(payload.prompt, payload.isImageGenerationEnabled);
+        break;
+
       case 'generateStoryTitle':
-        return await generateStoryTitle(payload);
+        result = await generateTitle(payload.prompt);
+        break;
+
       default:
-        return jsonResponse(400, { message: 'Invalid task specified' });
+        return { statusCode: 400, body: JSON.stringify({ message: `Unknown task: ${task}` }) };
     }
+
+    return {
+      statusCode: 200,
+      headers: JSON_HEADER,
+      body: JSON.stringify(result),
+    };
+
   } catch (error) {
     console.error('Error in Netlify function:', error);
     const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-    return jsonResponse(500, { message: 'Internal Server Error', error: errorMessage });
+    return { 
+        statusCode: 500, 
+        headers: JSON_HEADER,
+        body: JSON.stringify({ message: 'Internal Server Error', error: errorMessage }) 
+    };
   }
 };
-
-export { handler };

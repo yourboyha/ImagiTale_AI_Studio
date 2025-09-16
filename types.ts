@@ -1,33 +1,16 @@
-export enum GameState {
-  HOME,
-  MODE_SELECTION,
-  PRELOADING_VOCAB,
-  VOCAB_TRAINER,
-  STORY_TONE_SELECTION,
-  STORY,
-}
 
 export enum Language {
-  TH = 'th-TH',
   EN = 'en-US',
+  TH = 'th-TH',
 }
 
 export enum WordCategory {
-  ANIMALS_NATURE = "Animals & Nature",
-  FAMILY_PEOPLE = "Family & People",
-  FOOD_DRINK = "Food & Drink",
-  THINGS_TOYS = "Things & Toys",
-  PLACES_ENVIRONMENT = "Places & Environment",
-  ACTIONS_EMOTIONS = "Actions & Emotions",
-}
-
-export enum StoryTone {
-  ADVENTURE = "Adventure",
-  HEARTWARMING = "Heartwarming & Moral",
-  FUNNY = "Funny & Humorous",
-  DREAMY = "Dreamy & Imaginative",
-  MYSTERY = "Mystery & Discovery",
-  RELATIONSHIPS = "Relationships",
+  ANIMALS_NATURE = "animals_nature",
+  FAMILY_PEOPLE = "family_people",
+  FOOD_DRINK = "food_drink",
+  THINGS_TOYS = "things_toys",
+  PLACES_ENVIRONMENT = "places_environment",
+  ACTIONS_EMOTIONS = "actions_emotions",
 }
 
 export interface Word {
@@ -40,8 +23,17 @@ export interface PreloadedWord {
   imageUrl: string;
 }
 
+export enum StoryTone {
+  ADVENTURE = "adventure",
+  HEARTWARMING = "heartwarming",
+  FUNNY = "funny",
+  DREAMY = "dreamy",
+  MYSTERY = "mystery",
+  RELATIONSHIPS = "relationships",
+}
+
 export interface StoryScene {
   text: string;
   imageUrl: string;
-  choices?: string[];
+  choices: string[];
 }
