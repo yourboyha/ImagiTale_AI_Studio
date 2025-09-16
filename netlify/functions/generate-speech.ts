@@ -1,10 +1,24 @@
 // netlify/functions/generate-speech.ts
 
-// นี่คือโค้ดเวอร์ชันแก้ไข ที่เรียกใช้ Google Cloud Text-to-Speech API โดยตรง
-// ซึ่งเป็นวิธีที่ถูกต้องและเสถียรที่สุด
+// --- DEBUGGING VERSION ---
+// This version will help us confirm if the API Key is being loaded.
 
-// Handler ของ Netlify Function
 export const handler = async (event) => {
+  // --- DEBUGGING STEP ---
+  // We will log to the Netlify console to see if the API key is loaded.
+  const API_KEY = process.env.API_KEY;
+  console.log(`Function triggered. Attempting to use API Key. Is it loaded? ${API_KEY ? `Yes, starts with: ${API_KEY.substring(0, 4)}...` : 'No, it is UNDEFINED!'}`);
+  // --- END DEBUGGING STEP ---
+
+  // If the API Key is not found, return a specific error.
+  if (!API_KEY) {
+    console.error("CRITICAL: API_KEY environment variable is not set or not accessible in Netlify Functions.");
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: 'Server configuration error: API key not found.' }),
+    };
+  }
+
   const { textToSpeak, language } = JSON.parse(event.body);
 
   if (!textToSpeak) {
@@ -14,28 +28,20 @@ export const handler = async (event) => {
     };
   }
 
-  // กำหนดค่าเสียงตามภาษาที่ส่งมาจาก Client
   const voiceConfig = language === 'th-TH'
-    ? { languageCode: 'th-TH', name: 'th-TH-Standard-A' } // เสียงผู้หญิงไทยที่เป็นธรรมชาติ
-    : { languageCode: 'en-US', name: 'en-US-Studio-O' }; // เสียงผู้หญิงคุณภาพสตูดิโอ (เสียงนุ่มนวล)
+    ? { languageCode: 'th-TH', name: 'th-TH-Standard-A' }
+    : { languageCode: 'en-US', name: 'en-US-Studio-O' };
 
   try {
-    const API_KEY = process.env.API_KEY;
     const ttsApiUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${API_KEY}`;
 
     const response = await fetch(ttsApiUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        input: {
-          text: textToSpeak,
-        },
+        input: { text: textToSpeak },
         voice: voiceConfig,
-        audioConfig: {
-          audioEncoding: 'MP3', // ใช้ MP3 เพื่อคุณภาพที่ดีและขนาดไฟล์ที่เล็ก
-        },
+        audioConfig: { audioEncoding: 'MP3' },
       }),
     });
 
@@ -51,11 +57,10 @@ export const handler = async (event) => {
         throw new Error("Audio generation failed, no audioContent in response from Google TTS API.");
     }
 
-    // ส่งข้อมูลเสียงที่เข้ารหัสเป็น Base64 กลับไปให้ Client
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ audioContent: data.audioContent, mimeType: 'audio/mpeg' }), // mimeType สำหรับ MP3
+      body: JSON.stringify({ audioContent: data.audioContent, mimeType: 'audio/mpeg' }),
     };
 
   } catch (error) {
