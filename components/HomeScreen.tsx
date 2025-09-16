@@ -40,14 +40,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onStart }) => {
         <h1 
           className="text-5xl sm:text-7xl lg:text-8xl text-white font-extrabold" 
           style={{ 
-            letterSpacing: '0.025em', // Add breathing room for the stroke
-            textShadow: `
-              -2px -2px 0 ${strokeColor},  
-               2px -2px 0 ${strokeColor},
-              -2px  2px 0 ${strokeColor},
-               2px  2px 0 ${strokeColor},
-               0 5px 10px rgba(0,0,0,0.3)
-            `
+            letterSpacing: '0.025em',
+            WebkitTextStroke: `2.5px ${strokeColor}`,
+            paintOrder: 'stroke fill',
+            textShadow: `0 5px 15px rgba(0,0,0,0.35)`
           }}
         >
           ImagiTale
@@ -55,13 +51,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onStart }) => {
         <p 
           className="mt-4 text-lg md:text-xl text-white font-bold"
           style={{
-            textShadow: `
-              -1.5px -1.5px 0 ${strokeColor},  
-               1.5px -1.5px 0 ${strokeColor},
-              -1.5px  1.5px 0 ${strokeColor},
-               1.5px  1.5px 0 ${strokeColor},
-               0 3px 6px rgba(0,0,0,0.3)
-            `
+            WebkitTextStroke: `1px ${strokeColor}`,
+            textShadow: `0 3px 6px rgba(0,0,0,0.3)`
           }}
         >
           การผจญภัยในโลกนิทาน AI กำลังรอคุณอยู่!

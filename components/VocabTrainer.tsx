@@ -218,7 +218,7 @@ const VocabTrainer: React.FC<VocabTrainerProps> = ({ onComplete, round, language
       const newWord = fullWordList[nextAvailableWordIndex];
       const newImageUrl = isImageGenerationEnabled 
         ? await generateVocabImage(newWord.english)
-        : `https://picsum.photos/seed/${newWord.english}/400/300`;
+        : `https://loremflickr.com/400/300/${newWord.english},illustration,simple?lock=${newWord.english.replace(/\s/g, '')}`;
 
 
       const newWordData = [...wordData];

@@ -125,7 +125,7 @@ const VocabPreloader: React.FC<VocabPreloaderProps> = ({ category, onComplete, i
       for (const word of wordsForRound) {
         const imageUrl = isImageGenerationEnabled
             ? await generateVocabImage(word.english)
-            : `https://picsum.photos/seed/${word.english}/400/300`;
+            : `https://loremflickr.com/400/300/${word.english},illustration,simple?lock=${word.english.replace(/\s/g, '')}`;
         preloadedData.push({ word, imageUrl });
       }
       

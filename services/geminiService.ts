@@ -101,13 +101,13 @@ export const generateVocabImage = async (word: string): Promise<string> => {
     if (errorMessage.includes('quota exceeded') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
         alert("โควต้าสร้างภาพสำหรับวันนี้หมดแล้ว!\n\nคุณสามารถเล่นต่อโดยใช้ภาพสำรองได้ โดยไปที่ 'ตั้งค่า' และปิด 'สร้างภาพคำศัพท์ AI' และ 'สร้างภาพนิทาน AI' ชั่วคราวนะคะ");
     }
-    return `https://picsum.photos/seed/${word}/400/300`; // Fallback image
+    return `https://loremflickr.com/400/300/${word},illustration,simple?lock=${word.replace(/\s/g, '')}`; // Fallback image
   }
 };
 
 const generateImage = async (prompt: string, words: string[], isImageGenerationEnabled: boolean): Promise<string> => {
   if (!isImageGenerationEnabled) {
-    return "https://picsum.photos/1280/720"; // Return fallback immediately for debug mode
+    return "https://loremflickr.com/1280/720/storybook,magic,adventure?lock=story"; // Return fallback immediately for debug mode
   }
   try {
     const focusPrompt = `A vibrant, whimsical, child-friendly storybook illustration. Scene: ${prompt}. The main elements should be clear: ${words.join(', ')}. Style: simple, colorful storybook art. CRITICAL COMMAND: The image must contain ABSOLUTELY NO text, NO letters, NO words, and NO writing of any kind. The final output must be a pure, text-free picture.`;
@@ -132,7 +132,7 @@ const generateImage = async (prompt: string, words: string[], isImageGenerationE
     if (errorMessage.includes('quota exceeded') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
         alert("โควต้าสร้างภาพสำหรับวันนี้หมดแล้ว!\n\nคุณสามารถเล่นต่อโดยใช้ภาพสำรองได้ โดยไปที่ 'ตั้งค่า' และปิด 'สร้างภาพนิทาน AI' ชั่วคราวนะคะ");
     }
-    return "https://picsum.photos/1280/720"; // Fallback image
+    return "https://loremflickr.com/1280/720/storybook,magic,adventure?lock=story"; // Fallback image
   }
 };
 
@@ -179,7 +179,7 @@ export const generateInitialStoryScene = async (words: string[], language: Langu
     const fallbackChoices = language === Language.TH ? ["สำรวจป่า", "ข้ามสะพาน", "คุยกับนก"] : ["Explore the forest", "Cross the bridge", "Talk to a bird"];
     return {
       text: fallbackText,
-      imageUrl: "https://picsum.photos/1280/720",
+      imageUrl: "https://loremflickr.com/1280/720/adventure,magical,start?lock=scene1",
       choices: fallbackChoices,
     };
   }
@@ -237,7 +237,7 @@ export const generateNextStoryScene = async (storyHistory: string, userChoice: s
       : ["Go into the forest", "Go to the castle", "Hide in a cave"];
     return {
       text: fallbackText,
-      imageUrl: "https://picsum.photos/1280/720",
+      imageUrl: "https://loremflickr.com/1280/720/adventure,magical,journey?lock=scene2",
       choices: fallbackChoices,
     };
   }
@@ -273,7 +273,7 @@ export const generateFinalStoryScene = async (storyHistory: string, language: La
           : "And they all lived happily ever after, having learned a valuable lesson about friendship.";
         return {
             text: fallbackText,
-            imageUrl: "https://picsum.photos/1280/720",
+            imageUrl: "https://loremflickr.com/1280/720/happy,ending,friends?lock=scene_final",
         };
     }
 };
