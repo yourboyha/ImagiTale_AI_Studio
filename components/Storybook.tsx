@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Word, StoryScene, Language, StoryTone, AIPersonality } from '../types';
+import { Word, StoryScene, Language, StoryTone } from '../types';
 import { generateInitialStoryScene, generateNextStoryScene, generateFinalStoryScene, generateStoryTitle } from '../services/geminiService';
 import { STORY_FOLLOW_UP_QUESTIONS_TH, STORY_FOLLOW_UP_QUESTIONS_EN } from '../constants';
 import MicrophoneIcon from './icons/MicrophoneIcon';
@@ -17,10 +17,12 @@ interface StorybookProps {
   language: Language;
   storyTone: StoryTone;
   isImageGenerationEnabled: boolean;
-  aiPersonality: AIPersonality;
+  speak: (text: string) => void;
+  stopSpeech: () => void;
+  isSpeaking: boolean;
 }
 
-const Storybook: React.FC<StorybookProps> = ({ words, onComplete, language, storyTone, isImageGenerationEnabled, aiPersonality }) => {
+const Storybook: React.FC<StorybookProps> = ({ words, onComplete, language, storyTone, isImageGenerationEnabled, speak, stopSpeech, isSpeaking }) => {
   const [scenes, setScenes] = useState<StoryScene[]>([]);
   const [currentSceneIndex, setCurrentSceneIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -28,8 +30,6 @@ const Storybook: React.FC<StorybookProps> = ({ words, onComplete, language, stor
   const [transcript, setTranscript] = useState('');
   const [isAwaitingFeedback, setIsAwaitingFeedback] = useState(false);
   const [displayedText, setDisplayedText] = useState('');
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [storyTitle, setStoryTitle] = useState<string | null>(null);
   const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
 
@@ -44,17 +44,9 @@ const Storybook: React.FC<StorybookProps> = ({ words, onComplete, language, stor
     isMounted.current = true;
     return () => {
       isMounted.current = false;
-      window.speechSynthesis.cancel();
+      stopSpeech();
     };
-  }, []);
-  
-  useEffect(() => {
-    if (!('speechSynthesis' in window)) return;
-    const loadAndSetVoices = () => setVoices(window.speechSynthesis.getVoices());
-    loadAndSetVoices();
-    window.speechSynthesis.onvoiceschanged = loadAndSetVoices;
-    return () => { window.speechSynthesis.onvoiceschanged = null; };
-  }, []);
+  }, [stopSpeech]);
 
   useEffect(() => {
     const recognition = recognitionRef.current;
@@ -71,104 +63,32 @@ const Storybook: React.FC<StorybookProps> = ({ words, onComplete, language, stor
     if (feedbackTimeout.current) clearTimeout(feedbackTimeout.current);
   }, []);
 
-  const speak = useCallback((text: string, lang: Language): Promise<void> => {
-    return new Promise((resolve) => {
-      if (!('speechSynthesis' in window) || !text?.trim()) {
-        return resolve();
-      }
-
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = lang;
-
-      const availableVoices = voices.filter(v => v.lang.startsWith(lang.split('-')[0]));
-      let bestVoice: SpeechSynthesisVoice | null = null;
-
-      if (availableVoices.length > 0) {
-        const preferredVoiceKeywords = lang === Language.TH 
-            ? ['kanya', 'narisa', 'google']
-            : ['google', 'samantha', 'victoria', 'daniel', 'zira', 'david'];
-
-        const getVoiceScore = (voice: SpeechSynthesisVoice): number => {
-            let score = 0;
-            const name = voice.name.toLowerCase();
-            if (preferredVoiceKeywords.some(keyword => name.includes(keyword))) score += 2;
-            if (voice.localService) score += 1;
-            return score;
-        };
-
-        availableVoices.sort((a, b) => getVoiceScore(b) - getVoiceScore(a));
-        bestVoice = availableVoices[0];
-      }
-      
-      if (bestVoice) {
-        utterance.voice = bestVoice;
-      }
-      
-      utterance.rate = 0.9; // A more deliberate, storyteller pace
-      utterance.pitch = 1.1; // Slightly higher, friendly but not unnatural
-
-      let hasStarted = false;
-      const failsafeTimer = setTimeout(() => {
-        if (!hasStarted) {
-          console.warn('SpeechSynthesis did not start within 3 seconds.');
-          utterance.onend = null; utterance.onerror = null;
-          resolve();
-        }
-      }, 3000);
-
-      const onDone = () => {
-        clearTimeout(failsafeTimer);
-        if (isMounted.current) {
-          setTimeout(() => {
-            if (!window.speechSynthesis.speaking && isMounted.current) {
-              setIsSpeaking(false);
-            }
-          }, 50);
-        }
-        resolve();
-      };
-      
-      utterance.onstart = () => {
-        hasStarted = true;
-        if (isMounted.current) setIsSpeaking(true);
-      };
-
-      utterance.onend = onDone;
-
-      utterance.onerror = (event) => {
-        console.error('SpeechSynthesis Error:', event.error, 'for text:', text);
-        onDone();
-      };
-      
-      window.speechSynthesis.speak(utterance);
-    });
-  }, [voices]);
-
   const generateScene = useCallback(async (choice: string | null = null) => {
-    window.speechSynthesis.cancel();
-    setIsSpeaking(false);
+    stopSpeech();
     setIsLoading(true);
     setIsAwaitingFeedback(false);
     let newScene: StoryScene;
     const wordStrings = words.map(w => w.english);
     
     if (scenes.length === 0) {
-      newScene = await generateInitialStoryScene(wordStrings, language, storyTone, isImageGenerationEnabled, aiPersonality);
+      newScene = await generateInitialStoryScene(wordStrings, language, storyTone, isImageGenerationEnabled);
     } else if (scenes.length < 4) {
-      newScene = await generateNextStoryScene(storySoFar, choice || '', language, storyTone, wordStrings, isImageGenerationEnabled, scenes.length, aiPersonality);
+      newScene = await generateNextStoryScene(storySoFar, choice || '', language, storyTone, wordStrings, isImageGenerationEnabled, scenes.length);
     } else {
-      newScene = await generateFinalStoryScene(storySoFar, language, storyTone, wordStrings, isImageGenerationEnabled, aiPersonality);
+      newScene = await generateFinalStoryScene(storySoFar, language, storyTone, wordStrings, isImageGenerationEnabled);
     }
 
-    setScenes(prev => [...prev, newScene]);
-    if(scenes.length > 0) setCurrentSceneIndex(prev => prev + 1);
-    setIsLoading(false);
-  }, [words, scenes, storySoFar, language, storyTone, isImageGenerationEnabled, aiPersonality]);
+    if (isMounted.current) {
+        setScenes(prev => [...prev, newScene]);
+        if(scenes.length > 0) setCurrentSceneIndex(prev => prev + 1);
+        setIsLoading(false);
+    }
+  }, [words, scenes, storySoFar, language, storyTone, isImageGenerationEnabled, stopSpeech]);
   
   useEffect(() => {
     if (scenes.length === 0) generateScene();
     return cleanupListeners;
-  }, []);
+  }, [generateScene, cleanupListeners]);
   
   // Effect to generate story title when story is complete
   useEffect(() => {
@@ -205,72 +125,18 @@ const Storybook: React.FC<StorybookProps> = ({ words, onComplete, language, stor
 
       if (!hasSpokenForScene.current[currentSceneIndex]) {
         hasSpokenForScene.current[currentSceneIndex] = true;
-
-        const playNarrationSequence = () => {
-          if (!isMounted.current) return;
-
-          const createUtterance = (text: string): SpeechSynthesisUtterance | null => {
-            if (!('speechSynthesis' in window) || !text?.trim()) return null;
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = language;
-            const availableVoices = voices.filter(v => v.lang.startsWith(language.split('-')[0]));
-            if (availableVoices.length > 0) {
-              const preferredVoiceKeywords = language === Language.TH
-                ? ['kanya', 'narisa', 'google']
-                : ['google', 'samantha', 'victoria', 'daniel', 'zira', 'david'];
-              const getVoiceScore = (voice: SpeechSynthesisVoice) => {
-                let score = 0;
-                const name = voice.name.toLowerCase();
-                if (preferredVoiceKeywords.some(keyword => name.includes(keyword))) score += 2;
-                if (voice.localService) score += 1;
-                return score;
-              };
-              availableVoices.sort((a, b) => getVoiceScore(b) - getVoiceScore(a));
-              utterance.voice = availableVoices[0];
-            }
-            utterance.rate = 0.9;
-            utterance.pitch = 1.1;
-            return utterance;
-          };
-
-          const sceneUtterance = createUtterance(textToDisplay);
-          if (!sceneUtterance) return;
-          
-          const questionText = currentScene.choices?.length
-            ? (() => {
-                const questions = language === Language.TH ? STORY_FOLLOW_UP_QUESTIONS_TH : STORY_FOLLOW_UP_QUESTIONS_EN;
-                return questions[Math.floor(Math.random() * questions.length)];
-              })()
-            : null;
-
-          const questionUtterance = questionText ? createUtterance(questionText) : null;
-          
-          sceneUtterance.onstart = () => { if (isMounted.current) setIsSpeaking(true); };
-          sceneUtterance.onerror = (e) => console.error('SpeechSynthesis Error (scene):', e.error);
-          
-          const finalUtterance = questionUtterance || sceneUtterance;
-          finalUtterance.onend = () => { if (isMounted.current) setIsSpeaking(false); };
-          finalUtterance.onerror = (e) => {
-            console.error('SpeechSynthesis Error (final utterance):', e.error);
-            if (isMounted.current) setIsSpeaking(false);
-          };
-
-          setTimeout(() => {
-            if (isMounted.current) {
-              window.speechSynthesis.cancel();
-              window.speechSynthesis.speak(sceneUtterance);
-              if (questionUtterance) {
-                window.speechSynthesis.speak(questionUtterance);
-              }
-            }
-          }, 100);
-        };
-
-        playNarrationSequence();
+        
+        let fullTextToSpeak = textToDisplay;
+        if (currentScene.choices?.length) {
+            const questions = language === Language.TH ? STORY_FOLLOW_UP_QUESTIONS_TH : STORY_FOLLOW_UP_QUESTIONS_EN;
+            const questionText = questions[Math.floor(Math.random() * questions.length)];
+            fullTextToSpeak += ` ${questionText}`;
+        }
+        speak(fullTextToSpeak);
       }
 
       let i = 0;
-      const textSpeed = 90;
+      const textSpeed = 40; // Faster typing for better UX with real audio
       const intervalId = setInterval(() => {
         if (i < textToDisplay.length) {
           setDisplayedText(textToDisplay.substring(0, i + 1));
@@ -282,22 +148,19 @@ const Storybook: React.FC<StorybookProps> = ({ words, onComplete, language, stor
 
       return () => clearInterval(intervalId);
     }
-  }, [currentScene, isLoading, currentSceneIndex, language, voices]);
+  }, [currentScene, isLoading, currentSceneIndex, language, speak]);
 
   const handleSpeakChoice = (choiceText: string) => {
-    window.speechSynthesis.cancel();
-    speak(choiceText, language);
+    speak(choiceText);
   };
 
   const handleReplayOrStopAudio = useCallback(() => {
     if (isSpeaking) {
-      window.speechSynthesis.cancel();
-      setIsSpeaking(false);
+      stopSpeech();
     } else if (currentScene?.text && displayedText.length >= currentScene.text.length) {
-      window.speechSynthesis.cancel();
-      speak(currentScene.text, language);
+      speak(currentScene.text);
     }
-  }, [isSpeaking, currentScene, displayedText, language, speak]);
+  }, [isSpeaking, currentScene, displayedText, speak, stopSpeech]);
   
   const stopListening = useCallback(() => {
     const recognition = recognitionRef.current;
@@ -306,10 +169,9 @@ const Storybook: React.FC<StorybookProps> = ({ words, onComplete, language, stor
   
   const startListening = () => {
     const recognition = recognitionRef.current;
-    if (!recognition || isListening || isAwaitingFeedback || isLoading) return;
+    if (!recognition || isListening || isAwaitingFeedback || isLoading || isSpeaking) return;
     
-    window.speechSynthesis.cancel();
-    setIsSpeaking(false);
+    stopSpeech();
     cleanupListeners();
     isProcessing.current = false;
     setTranscript('');

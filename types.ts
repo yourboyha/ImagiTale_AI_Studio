@@ -30,14 +30,6 @@ export enum StoryTone {
   RELATIONSHIPS = "Relationships",
 }
 
-export enum AIPersonality {
-  WARM = "Warm & Friendly",
-  WISE = "Wise & Calm",
-  ENERGETIC = "Excited & Energetic",
-  SILLY = "Silly & Playful",
-  BRAVE = "Brave Explorer",
-}
-
 export interface Word {
   thai: string;
   english: string;

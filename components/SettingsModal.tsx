@@ -1,6 +1,4 @@
 import React from 'react';
-import { AIPersonality } from '../types';
-import { AI_PERSONALITY_THAI } from '../constants';
 import CloseIcon from './icons/CloseIcon';
 
 interface SettingsModalProps {
@@ -12,8 +10,6 @@ interface SettingsModalProps {
   setIsImageGenerationEnabled: (value: boolean) => void;
   isStoryImageGenerationEnabled: boolean;
   setIsStoryImageGenerationEnabled: (value: boolean) => void;
-  aiPersonality: AIPersonality;
-  setAiPersonality: (personality: AIPersonality) => void;
   showSkipButton: boolean;
   setShowSkipButton: (value: boolean) => void;
 }
@@ -27,10 +23,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   setIsImageGenerationEnabled,
   isStoryImageGenerationEnabled,
   setIsStoryImageGenerationEnabled,
-  aiPersonality,
-  setAiPersonality,
   showSkipButton,
-  setShowSkipButton
+  setShowSkipButton,
 }) => {
   if (!isOpen) return null;
 
@@ -39,18 +33,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     setIsDebugMode(newDebugModeState);
 
     if (newDebugModeState) {
-      // Developer mode is ON: set common debug settings
       setIsImageGenerationEnabled(false);
       setIsStoryImageGenerationEnabled(false);
       setShowSkipButton(true);
     } else {
-      // Developer mode is OFF: set default production settings
       setIsImageGenerationEnabled(true);
       setIsStoryImageGenerationEnabled(true);
       setShowSkipButton(false);
     }
   };
-
 
   return (
     <div 
@@ -87,7 +78,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               />
             </label>
             
-            {/* Sub-options, conditionally rendered with a transition */}
             <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isDebugMode ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
               <div className="pl-4 border-l-2 border-purple-200 space-y-3 pt-3">
                 <label className="flex items-center justify-between space-x-2 bg-gray-100 p-3 rounded-lg cursor-pointer select-none">
@@ -121,27 +111,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
         </div>
-
-        {/* AI Personality */}
-        <div>
-          <h3 className="text-lg font-semibold text-gray-800 border-b pb-2 mb-3">AI Storyteller Style</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {Object.values(AIPersonality).map(p => (
-              <button 
-                key={p}
-                onClick={() => setAiPersonality(p)}
-                className={`px-4 py-3 rounded-lg font-semibold text-sm transition-all duration-200 ${
-                  aiPersonality === p 
-                  ? 'bg-purple-600 text-white shadow-md scale-105' 
-                  : 'bg-gray-200 text-gray-700 hover:bg-purple-100'
-                }`}
-              >
-                {AI_PERSONALITY_THAI[p]}
-              </button>
-            ))}
-          </div>
-        </div>
-
       </div>
     </div>
   );

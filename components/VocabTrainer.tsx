@@ -16,9 +16,12 @@ interface VocabTrainerProps {
   initialData: PreloadedWord[];
   fullWordList: Word[];
   isImageGenerationEnabled: boolean;
+  speak: (text: string) => void;
+  stopSpeech: () => void;
+  isSpeaking: boolean;
 }
 
-const VocabTrainer: React.FC<VocabTrainerProps> = ({ onComplete, round, language, initialData, fullWordList, isImageGenerationEnabled }) => {
+const VocabTrainer: React.FC<VocabTrainerProps> = ({ onComplete, round, language, initialData, fullWordList, isImageGenerationEnabled, speak, stopSpeech, isSpeaking }) => {
   const [wordData, setWordData] = useState<PreloadedWord[]>([]);
   const [nextAvailableWordIndex, setNextAvailableWordIndex] = useState(MAX_WORDS_PER_ROUND);
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
@@ -60,13 +63,6 @@ const VocabTrainer: React.FC<VocabTrainerProps> = ({ onComplete, round, language
       setIsImageLoading(false);
     }
   }, [currentWordDataItem]);
-
-
-  const speakFeedback = (text: string, lang: Language) => {
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = lang;
-    window.speechSynthesis.speak(utterance);
-  };
   
   const cleanupListeners = useCallback(() => {
     if (recognition) {
@@ -86,7 +82,7 @@ const VocabTrainer: React.FC<VocabTrainerProps> = ({ onComplete, round, language
       if (!currentWord) return;
       const feedback = language === Language.EN ? 'Great job!' : 'เก่งมาก!';
       setFeedbackText(feedback);
-      speakFeedback(feedback, language);
+      speak(feedback);
       const newCollected = [...collectedWords, currentWord];
       setCollectedWords(newCollected);
 
@@ -102,19 +98,19 @@ const VocabTrainer: React.FC<VocabTrainerProps> = ({ onComplete, round, language
         }
         setIsAwaitingFeedback(false);
       }, 1000);
-  }, [collectedWords, currentWord, onComplete, language]);
+  }, [collectedWords, currentWord, onComplete, language, speak]);
 
   const handleIncorrectAnswer = useCallback(() => {
       setIncorrectAttempts(prev => prev + 1);
       const feedback = language === Language.EN ? 'Try again!' : 'ลองอีกครั้งนะ!';
       setFeedbackText(feedback);
-      speakFeedback(feedback, language);
+      speak(feedback);
       feedbackTimeout.current = setTimeout(() => {
         setFeedbackText(language === Language.EN ? 'Lets try that word again' : 'ลองพูดอีกครั้งนะ');
         setTranscript('');
         setIsAwaitingFeedback(false);
       }, 1000);
-  }, [language]);
+  }, [language, speak]);
 
   const processSpeech = useCallback((finalTranscript: string) => {
     if (!currentWord) return;
@@ -132,8 +128,9 @@ const VocabTrainer: React.FC<VocabTrainerProps> = ({ onComplete, round, language
   }, [currentWord, handleCorrectAnswer, handleIncorrectAnswer]);
 
   const startListening = () => {
-    if (!recognition || isListening || isAwaitingFeedback || isImageLoading) return;
+    if (!recognition || isListening || isAwaitingFeedback || isImageLoading || isSpeaking) return;
     
+    stopSpeech();
     cleanupListeners();
     isProcessing.current = false;
     setTranscript('');
@@ -200,11 +197,9 @@ const VocabTrainer: React.FC<VocabTrainerProps> = ({ onComplete, round, language
   }, [countdown, isListening, handleIncorrectAnswer]);
   
   const handleListenSound = () => {
-    if (!currentWord) return;
+    if (!currentWord || isSpeaking) return;
     const wordToSpeak = language === Language.EN ? currentWord.english : currentWord.thai;
-    const utterance = new SpeechSynthesisUtterance(wordToSpeak);
-    utterance.lang = language;
-    window.speechSynthesis.speak(utterance);
+    speak(wordToSpeak);
   };
   
   const handleSkipWord = async () => {
@@ -234,7 +229,7 @@ const VocabTrainer: React.FC<VocabTrainerProps> = ({ onComplete, round, language
 
   const targetLangWord = currentWord ? (language === Language.EN ? currentWord.english : currentWord.thai) : '';
   const translationWord = currentWord ? (language === Language.EN ? currentWord.thai : currentWord.english) : '';
-  const areButtonsDisabled = isListening || isAwaitingFeedback || isImageLoading || !currentWord;
+  const areButtonsDisabled = isListening || isAwaitingFeedback || isImageLoading || !currentWord || isSpeaking;
   const canSkip = incorrectAttempts >= 3;
 
   return (

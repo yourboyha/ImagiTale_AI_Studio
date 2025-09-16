@@ -1,4 +1,4 @@
-import { WordCategory, Word, StoryTone, AIPersonality } from './types';
+import { WordCategory, Word, StoryTone } from './types';
 
 export const MAX_WORDS_PER_ROUND = 5;
 
@@ -18,14 +18,6 @@ export const STORY_TONE_THAI: Record<StoryTone, string> = {
   [StoryTone.DREAMY]: "ความฝันและจินตนาการ",
   [StoryTone.MYSTERY]: "สืบสวนและไขปริศนา",
   [StoryTone.RELATIONSHIPS]: "ความสัมพันธ์และมิตรภาพ",
-};
-
-export const AI_PERSONALITY_THAI: Record<AIPersonality, string> = {
-  [AIPersonality.WARM]: "อบอุ่นและเป็นกันเอง",
-  [AIPersonality.WISE]: "สุขุมและรอบรู้",
-  [AIPersonality.ENERGETIC]: "ตื่นเต้นและกระตือรือร้น",
-  [AIPersonality.SILLY]: "ตลกและขี้เล่น",
-  [AIPersonality.BRAVE]: "นักสำรวจผู้กล้าหาญ",
 };
 
 export const STORY_FOLLOW_UP_QUESTIONS_TH: string[] = [

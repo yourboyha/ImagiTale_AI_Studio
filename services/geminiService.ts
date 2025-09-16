@@ -1,36 +1,11 @@
+
+
 import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
-import { StoryScene, Language, Word, WordCategory, StoryTone, AIPersonality } from '../types';
+import { StoryScene, Language, Word, WordCategory, StoryTone } from '../types';
 import { VOCABULARY, STORY_TONE_THAI } from '../constants';
 
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
-
-const getPersonalityPrompt = (personality: AIPersonality, language: Language): string => {
-  const isThai = language === Language.TH;
-  switch (personality) {
-    case AIPersonality.WISE:
-      return isThai
-        ? "สมมติตัวเองเป็นนักเล่านิทานผู้สุขุมและรอบรู้ เล่าเรื่องด้วยน้ำเสียงที่สงบและให้ข้อคิด"
-        : "Act as a wise, calm storyteller, weaving tales with a serene and thoughtful voice.";
-    case AIPersonality.ENERGETIC:
-      return isThai
-        ? "สมมติตัวเองเป็นเพื่อนที่กระตือรือร้นและตื่นเต้น กำลังชวนเด็กๆ ไปผจญภัยในโลกนิทานด้วยน้ำเสียงที่สดใสและเต็มไปด้วยพลัง"
-        : "Act as an excited and energetic friend, inviting the child on an adventure with a vibrant and enthusiastic voice.";
-    case AIPersonality.SILLY:
-      return isThai
-        ? "สมมติตัวเองเป็นตัวตลกขี้เล่นที่ชอบทำให้เด็กๆ หัวเราะ เล่าเรื่องด้วยมุกตลกและเสียงแปลกๆ ที่น่าขบขัน"
-        : "Act as a silly, playful clown who loves making children laugh. Tell the story with jokes and funny, exaggerated voices.";
-    case AIPersonality.BRAVE:
-      return isThai
-        ? "สมมติตัวเองเป็นนักสำรวจผู้กล้าหาญที่เพิ่งกลับมาจากการผจญภัย เล่าเรื่องราวด้วยน้ำเสียงที่หนักแน่นและน่าตื่นเต้น"
-        : "Act as a brave explorer just returned from a grand expedition. Narrate the tale with a bold, exciting voice full of wonder.";
-    case AIPersonality.WARM:
-    default:
-      return isThai
-        ? "สมมติตัวเองเป็นพ่อ/แม่ที่กำลังเล่านิทานให้ลูกฟังด้วยน้ำเสียงที่อบอุ่นและเป็นกันเอง"
-        : "Act as a warm, friendly parent telling a story to a young child.";
-  }
-};
 
 export const generateVocabularyList = async (category: WordCategory): Promise<Word[]> => {
   const prompt = `Generate a list of 10 vocabulary words for a 4-7 year old child in the category "${category}". 
@@ -136,10 +111,12 @@ const generateImage = async (prompt: string, words: string[], isImageGenerationE
   }
 };
 
-export const generateInitialStoryScene = async (words: string[], language: Language, storyTone: StoryTone, isImageGenerationEnabled: boolean, aiPersonality: AIPersonality): Promise<StoryScene> => {
+export const generateInitialStoryScene = async (words: string[], language: Language, storyTone: StoryTone, isImageGenerationEnabled: boolean): Promise<StoryScene> => {
   const wordList = words.join(', ');
   const toneDescription = language === Language.TH ? STORY_TONE_THAI[storyTone] : storyTone;
-  const personalityPrompt = getPersonalityPrompt(aiPersonality, language);
+  const storyStylePrompt = language === Language.TH
+    ? "สมมติตัวเองเป็นพ่อ/แม่ที่กำลังเล่านิทานให้ลูกฟังด้วยน้ำเสียงที่อบอุ่นและเป็นกันเอง"
+    : "Act as a warm, friendly parent telling a story to a young child.";
   
   const prompt = language === Language.TH
     ? `สร้างฉากแรกของนิทานเด็ก 5 ตอนในโทนเรื่อง "${toneDescription}" สำหรับเด็กอายุ 4-7 ปีเป็นภาษาไทย เขียนด้วยภาษาที่เรียบง่าย ประโยคสั้นๆ และเข้าใจง่ายเหมือนเล่าให้เด็กเล็กฟังจริงๆ เรื่องราวนี้จะมีโครงสร้าง 5 ส่วน: เริ่มต้น -> ผจญภัย -> อุปสรรค -> แก้ปัญหา -> จบ สำหรับฉากแรกนี้ ให้เขียนเฉพาะเนื้อเรื่องในส่วน "เริ่มต้น" โดยแนะนำฉากและตัวละครหลักอย่างเป็นธรรมชาติโดยใช้คำศัพท์เหล่านี้: ${wordList} เรื่องราวต้องเชื่อมโยงกัน มีเหตุมีผล และน่าติดตาม (ความยาว 2-4 ประโยค) คำสั่งสำคัญ: ผลลัพธ์ที่ได้จะต้องเป็นเนื้อเรื่องล้วนๆ และต้องขึ้นต้นด้วยเนื้อเรื่องทันที ห้ามมีคำอธิบาย, ป้ายกำกับ (เช่น 'ฉากหลัง:'), หรือเครื่องหมาย Markdown (เช่น **) ใดๆ ทั้งสิ้น จากนั้น ให้สร้าง "คำใบ้" 3 ตัวเลือกที่น่าสนใจและแตกต่างกันสำหรับฉากต่อไปให้เด็ก โดยต้องอยู่ในรูปแบบนี้เท่านั้น: [คำใบ้ที่ 1 | คำใบ้ที่ 2 | คำใบ้ที่ 3] โดยห้ามมีข้อความอื่นใดนอกวงเล็บนี้`
@@ -150,7 +127,7 @@ export const generateInitialStoryScene = async (words: string[], language: Langu
       model: 'gemini-2.5-flash',
       contents: prompt,
       config: {
-        systemInstruction: personalityPrompt,
+        systemInstruction: storyStylePrompt,
       },
     });
     
@@ -185,7 +162,7 @@ export const generateInitialStoryScene = async (words: string[], language: Langu
   }
 };
 
-export const generateNextStoryScene = async (storyHistory: string, userChoice: string, language: Language, storyTone: StoryTone, words: string[], isImageGenerationEnabled: boolean, sceneIndex: number, aiPersonality: AIPersonality): Promise<StoryScene> => {
+export const generateNextStoryScene = async (storyHistory: string, userChoice: string, language: Language, storyTone: StoryTone, words: string[], isImageGenerationEnabled: boolean, sceneIndex: number): Promise<StoryScene> => {
   const storyConcepts: Record<string, string[]> = {
     th: ["การผจญภัย", "อุปสรรค", "การแก้ปัญหา"],
     en: ["Adventure", "Obstacle", "Solution"]
@@ -193,7 +170,9 @@ export const generateNextStoryScene = async (storyHistory: string, userChoice: s
   const langKey = language === Language.TH ? 'th' : 'en';
   const currentConcept = storyConcepts[langKey][sceneIndex - 1];
   const toneDescription = language === Language.TH ? STORY_TONE_THAI[storyTone] : storyTone;
-  const personalityPrompt = getPersonalityPrompt(aiPersonality, language);
+  const storyStylePrompt = language === Language.TH
+    ? "สมมติตัวเองเป็นพ่อ/แม่ที่กำลังเล่านิทานให้ลูกฟังด้วยน้ำเสียงที่อบอุ่นและเป็นกันเอง"
+    : "Act as a warm, friendly parent telling a story to a young child.";
 
 
   const prompt = language === Language.TH
@@ -205,7 +184,7 @@ export const generateNextStoryScene = async (storyHistory: string, userChoice: s
       model: 'gemini-2.5-flash',
       contents: prompt,
       config: {
-        systemInstruction: personalityPrompt,
+        systemInstruction: storyStylePrompt,
       },
     });
 
@@ -243,9 +222,11 @@ export const generateNextStoryScene = async (storyHistory: string, userChoice: s
   }
 };
 
-export const generateFinalStoryScene = async (storyHistory: string, language: Language, storyTone: StoryTone, words: string[], isImageGenerationEnabled: boolean, aiPersonality: AIPersonality): Promise<StoryScene> => {
+export const generateFinalStoryScene = async (storyHistory: string, language: Language, storyTone: StoryTone, words: string[], isImageGenerationEnabled: boolean): Promise<StoryScene> => {
     const toneDescription = language === Language.TH ? STORY_TONE_THAI[storyTone] : storyTone;
-    const personalityPrompt = getPersonalityPrompt(aiPersonality, language);
+    const storyStylePrompt = language === Language.TH
+      ? "สมมติตัวเองเป็นพ่อ/แม่ที่กำลังเล่านิทานให้ลูกฟังด้วยน้ำเสียงที่อบอุ่นและเป็นกันเอง"
+      : "Act as a warm, friendly parent telling a story to a young child.";
     const prompt = language === Language.TH
       ? `นี่คือนิทานสำหรับเด็กอายุ 4-7 ปีในโทนเรื่อง "${toneDescription}" เนื้อเรื่องจนถึงตอนนี้คือ: "${storyHistory}" โปรดสร้างฉาก "จบ" เพื่อสรุปเรื่องราวนี้เป็นภาษาไทย ใช้ภาษาที่เรียบง่าย ประโยคสั้นๆ และเข้าใจง่ายเหมือนเล่าให้เด็กเล็กฟังจริงๆ สรุปเรื่องราวทั้งหมดให้สมบูรณ์ โดยให้มีตอนจบที่มีความสุขและให้ข้อคิดเชิงบวกที่เข้าใจง่ายซึ่งสอดคล้องกับโทนเรื่อง (ความยาว 2-4 ประโยค) คำสั่งสำคัญ: ผลลัพธ์ที่ได้จะต้องเป็นเนื้อเรื่องล้วนๆ และต้องขึ้นต้นด้วยเนื้อเรื่องทันที ห้ามมีคำอธิบาย, ป้ายกำกับ, หรือเครื่องหมาย Markdown (เช่น **) ใดๆ ทั้งสิ้น`
       : `This is a story for a 4-7 year old child with a "${storyTone}" tone. The story so far is: "${storyHistory}". Please create the final "Conclusion" scene to wrap up this story. CRITICAL: Use extremely simple, short sentences, as if speaking to a very young child. Conclude the entire story logically. Give it a happy ending and a simple, positive moral that fits the tone (2-4 sentences long). CRITICAL: The output must begin *directly* with the story narrative, with no preamble. The output must be ONLY the narrative text. Do not include any labels, descriptive tags, or markdown formatting.`;
@@ -255,7 +236,7 @@ export const generateFinalStoryScene = async (storyHistory: string, language: La
             model: 'gemini-2.5-flash',
             contents: prompt,
             config: {
-              systemInstruction: personalityPrompt,
+              systemInstruction: storyStylePrompt,
             },
         });
 

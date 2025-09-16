@@ -1,6 +1,5 @@
-
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { GameState, Word, WordCategory, Language, PreloadedWord, StoryTone, AIPersonality } from './types';
+import { GameState, Word, WordCategory, Language, PreloadedWord, StoryTone } from './types';
 import { VOCABULARY, WORD_CATEGORY_THAI, MAX_WORDS_PER_ROUND, STORY_TONE_THAI } from './constants';
 import { generateVocabImage, generateVocabularyList } from './services/geminiService';
 import HomeScreen from './components/HomeScreen';
@@ -16,37 +15,54 @@ import DreamyIcon from './components/icons/DreamyIcon';
 import MysteryIcon from './components/icons/MysteryIcon';
 import RelationshipsIcon from './components/icons/RelationshipsIcon';
 
+// --- Audio Player Component ---
+interface AudioPlayerProps {
+  src: string | null;
+  onEnded: () => void;
+  setPlaying: (isPlaying: boolean) => void;
+}
+const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, onEnded, setPlaying }) => {
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  useEffect(() => {
+    if (src && audioRef.current) {
+      audioRef.current.src = src;
+      audioRef.current.play().then(() => setPlaying(true)).catch(e => console.error("Audio play failed:", e));
+    }
+  }, [src, setPlaying]);
+
+  const handleEnded = () => {
+    setPlaying(false);
+    onEnded();
+  };
+  
+  const handlePlay = () => setPlaying(true);
+  const handlePause = () => setPlaying(false);
+
+  return <audio ref={audioRef} onEnded={handleEnded} onPlay={handlePlay} onPause={handlePause} hidden />;
+};
+
+
 // Component for the new Mode Selection Screen, defined within App.tsx to adhere to file constraints.
 interface ModeSelectionScreenProps {
   onStart: (language: Language, category: WordCategory) => void;
   onSkip: (language: Language, category: WordCategory) => void;
   showSkipButton: boolean;
-  speak: (text: string, lang: Language) => Promise<void>;
+  speak: (text: string) => void;
+  isSpeaking: boolean;
 }
-const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({ onStart, onSkip, showSkipButton, speak }) => {
+const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({ onStart, onSkip, showSkipButton, speak, isSpeaking }) => {
   const [language, setLanguage] = useState<Language>(Language.TH);
   const [category, setCategory] = useState<WordCategory>(WordCategory.ANIMALS_NATURE);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const isComponentMounted = useRef(true);
 
-  useEffect(() => {
-    isComponentMounted.current = true;
-    return () => { isComponentMounted.current = false; };
-  }, []);
-
-  const handleOptionClick = async (value: any, type: 'lang' | 'cat', textToSpeak: string) => {
+  const handleOptionClick = (value: any, type: 'lang' | 'cat', textToSpeak: string) => {
     if (isSpeaking) return;
+    speak(textToSpeak);
 
-    setIsSpeaking(true);
-    await speak(textToSpeak, type === 'lang' ? value : language);
-
-    if (isComponentMounted.current) {
-      if (type === 'lang') {
-        setLanguage(value);
-      } else {
-        setCategory(value);
-      }
-      setIsSpeaking(false);
+    if (type === 'lang') {
+      setLanguage(value);
+    } else {
+      setCategory(value);
     }
   };
 
@@ -149,18 +165,12 @@ const VocabPreloader: React.FC<VocabPreloaderProps> = ({ category, onComplete, i
 // Component for Story Tone Selection
 interface StoryToneSelectionScreenProps {
   onSelect: (tone: StoryTone) => void;
-  speak: (text: string, lang: Language) => Promise<void>;
+  speak: (text: string) => void;
   currentLanguage: Language;
+  isSpeaking: boolean;
 }
-const StoryToneSelectionScreen: React.FC<StoryToneSelectionScreenProps> = ({ onSelect, speak, currentLanguage }) => {
+const StoryToneSelectionScreen: React.FC<StoryToneSelectionScreenProps> = ({ onSelect, speak, currentLanguage, isSpeaking }) => {
   const [selectedTone, setSelectedTone] = useState<StoryTone>(StoryTone.ADVENTURE);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const isComponentMounted = useRef(true);
-
-  useEffect(() => {
-    isComponentMounted.current = true;
-    return () => { isComponentMounted.current = false; };
-  }, []);
 
   const toneDetails: Record<StoryTone, { icon: React.FC; colors: string; }> = {
     [StoryTone.ADVENTURE]: { icon: AdventureIcon, colors: 'bg-orange-500 hover:bg-orange-600 border-b-4 border-orange-700' },
@@ -171,16 +181,10 @@ const StoryToneSelectionScreen: React.FC<StoryToneSelectionScreenProps> = ({ onS
     [StoryTone.RELATIONSHIPS]: { icon: RelationshipsIcon, colors: 'bg-red-500 hover:bg-red-600 border-b-4 border-red-700' },
   };
 
-  const handleToneClick = async (tone: StoryTone) => {
+  const handleToneClick = (tone: StoryTone) => {
     if (isSpeaking) return;
-
-    setIsSpeaking(true);
-    await speak(STORY_TONE_THAI[tone], currentLanguage);
-
-    if (isComponentMounted.current) {
-      setSelectedTone(tone);
-      setIsSpeaking(false);
-    }
+    speak(STORY_TONE_THAI[tone]);
+    setSelectedTone(tone);
   };
 
   return (
@@ -223,7 +227,6 @@ const StoryToneSelectionScreen: React.FC<StoryToneSelectionScreenProps> = ({ onS
   );
 };
 
-
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>(GameState.HOME);
   const [collectedWords, setCollectedWords] = useState<Word[]>([]);
@@ -239,88 +242,77 @@ const App: React.FC = () => {
   const [isDebugMode, setIsDebugMode] = useState(false);
   const [isImageGenerationEnabled, setIsImageGenerationEnabled] = useState(true);
   const [isStoryImageGenerationEnabled, setIsStoryImageGenerationEnabled] = useState(true);
-  const [aiPersonality, setAiPersonality] = useState<AIPersonality>(AIPersonality.WARM);
   const [showSkipButton, setShowSkipButton] = useState(false);
   
-  // Speech Synthesis State
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const isMounted = useRef(true);
+  // High-Quality Speech Synthesis State
+  const [audioSrc, setAudioSrc] = useState<string | null>(null);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const [isAudioLoading, setIsAudioLoading] = useState(false);
+  const isSpeaking = isAudioPlaying || isAudioLoading;
 
-  useEffect(() => {
-    isMounted.current = true;
-    return () => { isMounted.current = false; window.speechSynthesis.cancel(); };
+  const speak = useCallback(async (text: string) => {
+    if (!text || isAudioLoading) return;
+    setIsAudioLoading(true);
+    setAudioSrc(null); // Clear previous audio
+    try {
+      // Call the new serverless function
+      const response = await fetch('/.netlify/functions/generate-speech', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ textToSpeak: text }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Speech generation failed with status: ${response.status}`);
+      }
+
+      const { audioContent, mimeType } = await response.json();
+      const audioUrl = `data:${mimeType};base64,${audioContent}`;
+      setAudioSrc(audioUrl);
+
+    } catch (error) {
+      console.error('Error fetching TTS audio:', error);
+      // Fallback or error handling
+    } finally {
+      setIsAudioLoading(false);
+    }
+  }, [isAudioLoading]);
+
+  const stopSpeech = useCallback(() => {
+    setAudioSrc(null);
+    setIsAudioPlaying(false);
   }, []);
   
-  useEffect(() => {
-    if (!('speechSynthesis' in window)) return;
-    const loadAndSetVoices = () => setVoices(window.speechSynthesis.getVoices());
-    loadAndSetVoices();
-    window.speechSynthesis.onvoiceschanged = loadAndSetVoices;
-    return () => { window.speechSynthesis.onvoiceschanged = null; };
+  const handleAudioEnded = useCallback(() => {
+    setAudioSrc(null);
   }, []);
 
-  const speak = useCallback((text: string, lang: Language): Promise<void> => {
-    return new Promise((resolve) => {
-      if (!('speechSynthesis' in window) || !text?.trim()) {
-        resolve();
-        return;
-      }
-      window.speechSynthesis.cancel();
-      
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = lang;
-
-      const availableVoices = voices.filter(v => v.lang.startsWith(lang.split('-')[0]));
-      if (availableVoices.length > 0) {
-        const preferredVoiceKeywords = lang === Language.TH 
-            ? ['kanya', 'narisa', 'google']
-            : ['google', 'samantha', 'victoria', 'daniel', 'zira', 'david'];
-        const getVoiceScore = (voice: SpeechSynthesisVoice) => {
-          let score = 0;
-          const name = voice.name.toLowerCase();
-          if (preferredVoiceKeywords.some(keyword => name.includes(keyword))) score += 2;
-          if (voice.localService) score += 1;
-          return score;
-        };
-        availableVoices.sort((a, b) => getVoiceScore(b) - getVoiceScore(a));
-        utterance.voice = availableVoices[0];
-      }
-      utterance.rate = 1.0;
-      utterance.pitch = 1.0;
-
-      utterance.onend = () => resolve();
-      utterance.onerror = (event) => {
-        console.error("SpeechSynthesis Error:", event.error, "for text:", text);
-        resolve(); // Resolve even on error to not block the flow
-      };
-
-      window.speechSynthesis.speak(utterance);
-    });
-  }, [voices]);
-
-
   const handleStart = useCallback(() => {
+    stopSpeech();
     setCollectedWords([]);
     setRound(1);
     setGameState(GameState.MODE_SELECTION);
-  }, []);
+  }, [stopSpeech]);
 
   const handleGoHome = useCallback(() => {
+    stopSpeech();
     setGameState(GameState.HOME);
-  }, []);
+  }, [stopSpeech]);
 
   const handleModeSelected = useCallback((lang: Language, cat: WordCategory) => {
+    stopSpeech();
     setLanguage(lang);
     setCategory(cat);
     setGameState(GameState.PRELOADING_VOCAB);
-  }, []);
+  }, [stopSpeech]);
 
   const handleSkipToStory = useCallback((lang: Language, cat: WordCategory) => {
+    stopSpeech();
     setLanguage(lang);
     const debugWords = VOCABULARY[cat].slice(0, MAX_WORDS_PER_ROUND);
     setCollectedWords(debugWords);
     setGameState(GameState.STORY_TONE_SELECTION);
-  }, []);
+  }, [stopSpeech]);
 
   const handleVocabPreloadComplete = useCallback((data: { preloadedData: PreloadedWord[]; shuffledFullList: Word[] }) => {
     setPreloadedData(data.preloadedData);
@@ -329,27 +321,30 @@ const App: React.FC = () => {
   }, []);
   
   const handleVocabComplete = useCallback((words: Word[]) => {
+    stopSpeech();
     setCollectedWords(words);
     setGameState(GameState.STORY_TONE_SELECTION);
-  }, []);
+  }, [stopSpeech]);
 
   const handleToneSelected = useCallback((tone: StoryTone) => {
+    stopSpeech();
     setStoryTone(tone);
     setGameState(GameState.STORY);
-  }, []);
+  }, [stopSpeech]);
 
   const handleStoryComplete = useCallback(() => {
+    stopSpeech();
     setGameState(GameState.MODE_SELECTION);
     setCollectedWords([]);
     setRound(prev => prev + 1);
-  }, []);
+  }, [stopSpeech]);
   
   const renderContent = () => {
     switch (gameState) {
       case GameState.HOME:
         return <HomeScreen onStart={handleStart} />;
       case GameState.MODE_SELECTION:
-        return <ModeSelectionScreen onStart={handleModeSelected} onSkip={handleSkipToStory} showSkipButton={isDebugMode && showSkipButton} speak={speak} />;
+        return <ModeSelectionScreen onStart={handleModeSelected} onSkip={handleSkipToStory} showSkipButton={isDebugMode && showSkipButton} speak={speak} isSpeaking={isSpeaking} />;
       case GameState.PRELOADING_VOCAB:
         return <VocabPreloader category={category} onComplete={handleVocabPreloadComplete} isImageGenerationEnabled={isImageGenerationEnabled} />;
       case GameState.VOCAB_TRAINER:
@@ -360,9 +355,12 @@ const App: React.FC = () => {
                   initialData={preloadedData}
                   fullWordList={shuffledFullList}
                   isImageGenerationEnabled={isImageGenerationEnabled}
+                  speak={speak}
+                  stopSpeech={stopSpeech}
+                  isSpeaking={isSpeaking}
                 />;
       case GameState.STORY_TONE_SELECTION:
-        return <StoryToneSelectionScreen onSelect={handleToneSelected} speak={speak} currentLanguage={language} />;
+        return <StoryToneSelectionScreen onSelect={handleToneSelected} speak={speak} currentLanguage={language} isSpeaking={isSpeaking} />;
       case GameState.STORY:
         return <Storybook 
                   words={collectedWords} 
@@ -370,7 +368,9 @@ const App: React.FC = () => {
                   language={language} 
                   storyTone={storyTone}
                   isImageGenerationEnabled={isStoryImageGenerationEnabled}
-                  aiPersonality={aiPersonality}
+                  speak={speak}
+                  stopSpeech={stopSpeech}
+                  isSpeaking={isSpeaking}
                 />;
       default:
         return <HomeScreen onStart={handleStart} />;
@@ -380,6 +380,7 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen w-full font-sans text-gray-800 bg-gradient-to-br from-blue-100 via-purple-100 to-yellow-100 flex items-center justify-center p-4">
       <div className="w-full max-w-4xl h-[90vh] max-h-[800px] bg-white/70 backdrop-blur-xl rounded-3xl shadow-2xl overflow-hidden relative">
+        <AudioPlayer src={audioSrc} onEnded={handleAudioEnded} setPlaying={setIsAudioPlaying} />
         {gameState !== GameState.HOME && (
           <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
              <button
@@ -410,8 +411,6 @@ const App: React.FC = () => {
             setIsImageGenerationEnabled={setIsImageGenerationEnabled}
             isStoryImageGenerationEnabled={isStoryImageGenerationEnabled}
             setIsStoryImageGenerationEnabled={setIsStoryImageGenerationEnabled}
-            aiPersonality={aiPersonality}
-            setAiPersonality={setAiPersonality}
             showSkipButton={showSkipButton}
             setShowSkipButton={setShowSkipButton}
         />
