@@ -1,133 +1,157 @@
-import { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";
+
+import type { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";
 import { GoogleGenAI, Type } from "@google/genai";
 
-// A utility to safely parse JSON from the model, which might be wrapped in markdown.
-const safeJsonParse = <T>(jsonString: string): T | null => {
-  const cleanedString = jsonString.replace(/^```json\s*|```\s*$/g, '').trim();
-  try {
-    return JSON.parse(cleanedString) as T;
-  } catch (error) {
-    console.error("Failed to parse JSON:", cleanedString);
-    return null;
-  }
+// Initialize the Google Gemini API client
+// The API key is securely stored as an environment variable on Netlify
+if (!process.env.API_KEY) {
+  throw new Error("API_KEY environment variable is not set.");
+}
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+// --- Helper function to create a JSON response ---
+const jsonResponse = (statusCode: number, body: any) => {
+  return {
+    statusCode,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  };
 };
 
+// --- Task: Generate Vocabulary List ---
+const generateVocabularyList = async (payload: any) => {
+  const { category } = payload;
+  const prompt = `Generate a list of 10 simple, common, and distinct vocabulary words for a 3-6 year old child related to the category "${category}". Provide the words in both Thai and English. Respond with ONLY a single JSON array of objects. Each object should have two keys: "thai" and "english". Do not include any other text, explanations, or markdown formatting.`;
+  
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: prompt,
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            thai: { type: Type.STRING },
+            english: { type: Type.STRING },
+          },
+          required: ["thai", "english"],
+        },
+      },
+    },
+  });
+
+  const vocabList = JSON.parse(response.text);
+  return jsonResponse(200, vocabList);
+};
+
+// --- Task: Generate Image (for Vocab and Story) ---
+const generateImage = async (payload: any) => {
+  const { prompt, aspectRatio = '1:1' } = payload;
+  
+  const response = await ai.models.generateImages({
+    model: 'imagen-4.0-generate-001',
+    prompt,
+    config: {
+      numberOfImages: 1,
+      outputMimeType: 'image/jpeg',
+      aspectRatio,
+    },
+  });
+
+  const base64ImageBytes = response.generatedImages[0].image.imageBytes;
+  const imageUrl = `data:image/jpeg;base64,${base64ImageBytes}`;
+  return jsonResponse(200, { imageUrl });
+};
+
+// --- Task: Generate Full Story Scene (Text + Image) ---
+const generateFullStoryScene = async (payload: any) => {
+  const { prompt, isImageGenerationEnabled } = payload;
+
+  // 1. Generate story text and choices
+  const textResponse = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: prompt,
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          text: { type: Type.STRING, description: "One or two paragraphs of the story scene, written in simple language for a child." },
+          choices: {
+            type: Type.ARRAY,
+            description: "An array of 2 simple choices for the user. Should be an empty array for the final scene.",
+            items: { type: Type.STRING }
+          },
+        },
+        required: ["text", "choices"],
+      },
+    },
+  });
+
+  const storyData = JSON.parse(textResponse.text);
+  let imageUrl: string;
+
+  // 2. Generate image for the scene (if enabled)
+  if (isImageGenerationEnabled) {
+    const imagePrompt = `A cute and whimsical, colorful children's storybook illustration. Minimalist style with soft, friendly characters and a simple background. The scene depicts: "${storyData.text}".`;
+    const imageGenResponse = await ai.models.generateImages({
+        model: 'imagen-4.0-generate-001',
+        prompt: imagePrompt,
+        config: {
+            numberOfImages: 1,
+            outputMimeType: 'image/jpeg',
+            aspectRatio: '16:9',
+        },
+    });
+    const base64ImageBytes = imageGenResponse.generatedImages[0].image.imageBytes;
+    imageUrl = `data:image/jpeg;base64,${base64ImageBytes}`;
+  } else {
+    // Fallback placeholder image
+    imageUrl = `https://loremflickr.com/1280/720/kids,story,illustration,${storyData.text.split(' ')[0] || 'scene'}`;
+  }
+
+  const finalScene = { ...storyData, imageUrl };
+  return jsonResponse(200, finalScene);
+};
+
+// --- Task: Generate Story Title ---
+const generateStoryTitle = async (payload: any) => {
+    const { prompt } = payload;
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+    });
+    return jsonResponse(200, { title: response.text.trim().replace(/"/g, '') });
+};
+
+
+// --- Main Netlify Function Handler ---
 const handler: Handler = async (event: HandlerEvent, context: HandlerContext) => {
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: JSON.stringify({ message: 'Method Not Allowed' }) };
+    return jsonResponse(405, { message: 'Method Not Allowed' });
   }
 
-  const { task, payload } = JSON.parse(event.body || '{}');
-  const API_KEY = process.env.API_KEY;
-
-  if (!API_KEY) {
-    return { statusCode: 500, body: JSON.stringify({ message: 'API_KEY is not configured on the server.' }) };
-  }
-  
-  // --- Task: Google Cloud Text-to-Speech ---
-  if (task === 'generate-speech') {
-    try {
-      const { textToSpeak, language } = payload;
-      const TTS_API_URL = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${API_KEY}`;
-      const voiceConfig = language.startsWith('th')
-        ? { languageCode: 'th-TH', name: 'th-TH-Wavenet-A' }
-        : { languageCode: 'en-US', name: 'en-US-Wavenet-D' };
-
-      const ttsResponse = await fetch(TTS_API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          input: { text: textToSpeak },
-          voice: voiceConfig,
-          audioConfig: { audioEncoding: 'MP3' },
-        }),
-      });
-
-      if (!ttsResponse.ok) throw new Error(`Google TTS API failed with status: ${ttsResponse.status}`);
-
-      const responseData = await ttsResponse.json();
-      return { statusCode: 200, body: JSON.stringify({ audioContent: responseData.audioContent, mimeType: 'audio/mpeg' }) };
-    } catch (error) {
-      console.error(`Error in task "${task}":`, error);
-      return { statusCode: 500, body: JSON.stringify({ message: 'Internal Server Error', error: error.message }) };
-    }
-  }
-
-  // --- All other tasks use Gemini API ---
-  const ai = new GoogleGenAI({ apiKey: API_KEY });
   try {
+    const { task, payload } = JSON.parse(event.body || '{}');
+
     switch (task) {
-      case 'generateVocabularyList': {
-        const { category } = payload;
-        const prompt = `Generate a list of 5 unique, simple, and common vocabulary words for a young child (age 3-6) related to the category "${category}". Provide the response as a JSON array of objects, where each object has a "thai" and "english" key.`;
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: prompt,
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { thai: { type: Type.STRING }, english: { type: Type.STRING } }, required: ['thai', 'english'] } },
-          },
-        });
-        const result = JSON.parse(response.text.trim());
-        return { statusCode: 200, body: JSON.stringify(result) };
-      }
-
-      case 'generateImage': {
-        const { prompt, aspectRatio } = payload;
-        const response = await ai.models.generateImages({
-          model: 'imagen-4.0-generate-001', prompt,
-          config: { numberOfImages: 1, outputMimeType: 'image/jpeg', aspectRatio },
-        });
-        const base64ImageBytes = response.generatedImages[0].image.imageBytes;
-        const imageUrl = `data:image/jpeg;base64,${base64ImageBytes}`;
-        return { statusCode: 200, body: JSON.stringify({ imageUrl }) };
-      }
-      
-      case 'generateFullStoryScene': {
-        const { prompt, isImageGenerationEnabled } = payload;
-        const textResponse = await ai.models.generateContent({
-            model: 'gemini-2.5-flash', contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: { text: { type: Type.STRING }, choices: { type: Type.ARRAY, items: { type: Type.STRING } } },
-                    required: ['text', 'choices'],
-                }
-            }
-        });
-        const sceneContent = safeJsonParse<{ text: string; choices?: string[] }>(textResponse.text);
-        if (!sceneContent || !sceneContent.text) throw new Error("Invalid scene format from AI.");
-
-        let imageUrl: string;
-        if (isImageGenerationEnabled) {
-          const imagePrompt = `Children's book illustration, simple and cute, vibrant colors, clear outlines, friendly characters. Scene: ${sceneContent.text}`;
-          const imageResponse = await ai.models.generateImages({
-            model: 'imagen-4.0-generate-001', prompt: imagePrompt,
-            config: { numberOfImages: 1, outputMimeType: 'image/jpeg', aspectRatio: '16:9' },
-          });
-          imageUrl = `data:image/jpeg;base64,${imageResponse.generatedImages[0].image.imageBytes}`;
-        } else {
-          imageUrl = `https://loremflickr.com/1280/720/story,illustration,cute?lock=${sceneContent.text.substring(0, 10)}`;
-        }
-
-        const fullScene = { text: sceneContent.text, choices: sceneContent.choices || [], imageUrl };
-        return { statusCode: 200, body: JSON.stringify(fullScene) };
-      }
-
-      case 'generateStoryTitle': {
-        const { prompt } = payload;
-        const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-        const title = response.text.trim().replace(/"/g, '');
-        return { statusCode: 200, body: JSON.stringify({ title }) };
-      }
-
+      case 'generateVocabularyList':
+        return await generateVocabularyList(payload);
+      case 'generateImage':
+        return await generateImage(payload);
+      case 'generateFullStoryScene':
+        return await generateFullStoryScene(payload);
+      case 'generateStoryTitle':
+        return await generateStoryTitle(payload);
       default:
-        return { statusCode: 400, body: JSON.stringify({ message: `Unknown task: ${task}` }) };
+        return jsonResponse(400, { message: 'Invalid task specified' });
     }
   } catch (error) {
-    console.error(`Error in task "${task}":`, error);
-    return { statusCode: 500, body: JSON.stringify({ message: 'Internal Server Error', error: error.message }) };
+    console.error('Error in Netlify function:', error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+    return jsonResponse(500, { message: 'Internal Server Error', error: errorMessage });
   }
 };
 

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Word, StoryScene, Language, StoryTone } from '../types';
 import { generateInitialStoryScene, generateNextStoryScene, generateFinalStoryScene, generateStoryTitle } from '../services/geminiService';
